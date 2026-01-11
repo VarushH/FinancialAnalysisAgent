@@ -1,0 +1,56 @@
+# Web API
+# fastapi==0.122.0
+# uvicorn==0.38.0
+# starlette==0.50.0
+# python-multipart==0.0.20
+
+# Configuration & Models
+pydantic==2.12.5
+pydantic-settings==2.12.0
+
+# AWS
+boto3==1.41.4
+botocore==1.41.4
+
+# HTTP clients & Frontend
+requests==2.32.5
+streamlit==1.51.0
+
+# LangChain and related integrations
+langchain==1.1.0
+langchain-core==1.1.0
+langchain-community==0.4.1
+langchain-huggingface==1.1.0
+langchain-google-genai==3.2.0
+langchain-text-splitters==1.0.0
+langchain-qdrant
+langchain-groq
+
+# Langgraph / state machine
+langgraph==1.0.4
+langgraph-checkpoint==3.0.1
+
+# Embeddings / vector store / loaders
+qdrant-client
+fastembed
+# huggingface-hub==0.36.0
+sentence-transformers==5.1.2
+unstructured==0.18.21
+unstructured-client==0.42.4
+# pypdf==6.4.0
+pdfplumber
+python-magic==0.4.27
+
+# Utilities
+numpy==2.3.5
+orjson==3.11.4
+watchdog==6.0.0
+structlog==25.5.0
+
+# developer
+pytest==9.0.1
+locust==2.39.1
+
+#Visuzalization
+matplotlib
+seaborn
