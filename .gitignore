@@ -7,7 +7,33 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+frontend/node_modules/
+node_modules/
 .Python
+
+# Frontend build artifacts
+frontend/build/
+
+# Django media and static files (uploaded/generated content)
+backend/media/
+backend/staticfiles/
+
+# IDE / Editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Package lock files (optional, uncomment if you don't want to track them)
+# package-lock.json
+
+# Qdrant data (if running locally)
+qdrant_storage/
 build/
 develop-eggs/
 dist/
