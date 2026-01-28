@@ -34,6 +34,12 @@ const App: React.FC = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [feedback, setFeedback] = useState('');
 
+  // Editable report content
+  const [editedAnalysis, setEditedAnalysis] = useState('');
+  const [editedCompliance, setEditedCompliance] = useState('');
+  const [editedRisk, setEditedRisk] = useState('');
+  const editableInitialized = useRef(false);
+
   // WebSocket reference
   const ws = useRef<WebSocket | null>(null);
 
@@ -75,6 +81,15 @@ const App: React.FC = () => {
       const res = await fetch(`/api/sessions/${sessionId}/status/`);
       const data = await res.json();
       setStatus(data);
+
+      // Initialize editable fields ONLY ONCE when report preview first appears
+      if (data.preview?.type === 'report' && !editableInitialized.current) {
+        setEditedAnalysis(data.preview.analysis || '');
+        setEditedCompliance(data.preview.compliance || '');
+        setEditedRisk(data.preview.risk || '');
+        editableInitialized.current = true;
+      }
+
       if (data.status === 'completed') {
         setCompleted(true);
       }
@@ -111,14 +126,31 @@ const App: React.FC = () => {
     setIsApproving(true);
 
     try {
+      // Build request body with edited content if at report_approval checkpoint
+      const requestBody: any = { feedback };
+      if (status?.approval_checkpoint === 'report_approval') {
+        requestBody.edited_content = {
+          analysis: editedAnalysis,
+          compliance: editedCompliance,
+          risk: editedRisk
+        };
+        console.log('Sending edited content:', requestBody.edited_content);
+      }
+
       const res = await fetch(`/api/sessions/${sessionId}/approve/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback })
+        body: JSON.stringify(requestBody)
       });
       const data = await res.json();
       setMessages(prev => [...prev, `✅ Approved: ${data.approved_checkpoint}`]);
       setFeedback('');
+
+      // Reset edited fields
+      setEditedAnalysis('');
+      setEditedCompliance('');
+      setEditedRisk('');
+
       fetchStatus();
     } catch (err) {
       setMessages(prev => [...prev, '❌ Failed to approve']);
@@ -162,17 +194,33 @@ const App: React.FC = () => {
       return (
         <div className="preview-section">
           <h4>📋 {preview.title}</h4>
+          <p className="edit-hint">✏️ You can edit the content below before approving</p>
           <div className="preview-item">
             <strong>💰 Finance Analysis:</strong>
-            <p>{preview.analysis}</p>
+            <textarea
+              className="editable-preview"
+              value={editedAnalysis}
+              onChange={(e) => setEditedAnalysis(e.target.value)}
+              rows={6}
+            />
           </div>
           <div className="preview-item">
             <strong>⚖️ Compliance Check:</strong>
-            <p>{preview.compliance}</p>
+            <textarea
+              className="editable-preview"
+              value={editedCompliance}
+              onChange={(e) => setEditedCompliance(e.target.value)}
+              rows={6}
+            />
           </div>
           <div className="preview-item">
             <strong>📊 Risk Assessment:</strong>
-            <p>{preview.risk}</p>
+            <textarea
+              className="editable-preview"
+              value={editedRisk}
+              onChange={(e) => setEditedRisk(e.target.value)}
+              rows={6}
+            />
           </div>
         </div>
       );

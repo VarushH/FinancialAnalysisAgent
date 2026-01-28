@@ -139,16 +139,19 @@ def approve_checkpoint(request, session_id):
         }, status=400)
     
     feedback = request.data.get('feedback', '')
+    edited_content = request.data.get('edited_content', None)  # Get edited report content
     checkpoint = session.approval_checkpoint
     print(f"\n✅ Approving checkpoint: {checkpoint} for session {session_id}")
+    if edited_content:
+        print(f"   📝 Received edited content")
     
     session.approve_checkpoint()
     
     # Resume pipeline in background thread
     def resume_pipeline():
         try:
-            # Pass the checkpoint name to resume from the correct phase
-            final_state = resume_analysis_pipeline(session_id, feedback, checkpoint)
+            # Pass the checkpoint name and edited content to resume from the correct phase
+            final_state = resume_analysis_pipeline(session_id, feedback, checkpoint, edited_content)
             
             print(f"   Resume result - Status: {final_state.get('status')}")
             print(f"   Requires approval: {final_state.get('requires_human_approval')}")

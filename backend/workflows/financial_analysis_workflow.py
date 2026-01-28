@@ -233,10 +233,11 @@ async def arun_analysis_pipeline(session_id: int) -> AgentState:
     print(f"{'='*50}")
     
     # Get session
-    def get_session():
-        return AnalysisSession.objects.get(pk=session_id)
+    def get_session(sid):
+        from api.models import AnalysisSession
+        return AnalysisSession.objects.get(pk=sid)
     
-    session = await asyncio.get_event_loop().run_in_executor(None, get_session)
+    session = await asyncio.get_event_loop().run_in_executor(None, get_session, session_id)
     print(f"File: {session.file.path}")
     
     # Create initial state
@@ -270,10 +271,11 @@ async def aresume_from_extraction(session_id: int, feedback: str = None) -> Agen
     print(f"{'='*50}")
     
     # Get session to get file path
-    def get_session():
-        return AnalysisSession.objects.get(pk=session_id)
+    def get_session(sid):
+        from api.models import AnalysisSession
+        return AnalysisSession.objects.get(pk=sid)
     
-    session = await asyncio.get_event_loop().run_in_executor(None, get_session)
+    session = await asyncio.get_event_loop().run_in_executor(None, get_session, session_id)
     
     # Get the checkpointer to retrieve state
     checkpointer = get_checkpointer()
@@ -321,17 +323,19 @@ async def aresume_from_extraction(session_id: int, feedback: str = None) -> Agen
         return state
 
 
-async def aresume_from_report(session_id: int, feedback: str = None) -> AgentState:
+async def aresume_from_report(session_id: int, feedback: str = None, edited_content: dict = None) -> AgentState:
     """Resume from report checkpoint to completion."""
     print(f"\n{'='*50}")
     print(f"RESUMING PIPELINE (Phase 3) - Session {session_id}")
     print(f"{'='*50}")
     
     # Get session
-    def get_session():
-        return AnalysisSession.objects.get(pk=session_id)
+    # Get session
+    def get_session(sid):
+        from api.models import AnalysisSession
+        return AnalysisSession.objects.get(pk=sid)
     
-    session = await asyncio.get_event_loop().run_in_executor(None, get_session)
+    session = await asyncio.get_event_loop().run_in_executor(None, get_session, session_id)
     
     # Get checkpointer state - try cache first (contains report_path)
     from .checkpointer import get_cached_state
@@ -369,6 +373,35 @@ async def aresume_from_report(session_id: int, feedback: str = None) -> AgentSta
     if feedback:
         state["human_feedback"] = feedback
     
+    # If edited content provided, update state and regenerate PDF
+    if edited_content:
+        print(f"   📝 Applying edited content...")
+        print(f"   📝 Edited content keys: {list(edited_content.keys())}")
+        if 'analysis' in edited_content:
+            print(f"   📝 New analysis (first 50 chars): {edited_content['analysis'][:50]}...")
+            state['analysis_result'] = edited_content['analysis']
+        if 'compliance' in edited_content:
+            print(f"   📝 New compliance (first 50 chars): {edited_content['compliance'][:50]}...")
+            state['compliance_result'] = edited_content['compliance']
+        if 'risk' in edited_content:
+            print(f"   📝 New risk (first 50 chars): {edited_content['risk'][:50]}...")
+            state['risk_result'] = edited_content['risk']
+        
+        # Regenerate PDF with edited content
+        print(f"   🔄 Regenerating PDF with edited content...")
+        state = await report_generation_node(state)
+        print(f"   ✅ PDF regenerated: {state.get('report_path')}")
+        
+        # Update report_path in database immediately using executor
+        report_path = state.get('report_path')
+        if report_path:
+            def update_report_path(sid, path):
+                from api.models import AnalysisSession
+                AnalysisSession.objects.filter(pk=sid).update(report_file=path)
+            
+            await asyncio.get_event_loop().run_in_executor(None, update_report_path, session_id, report_path)
+            print(f"   💾 Report path saved to database: {report_path}")
+    
     # Run phase 3: completion
     try:
         print("\n🚀 Running workflow phase 3...")
@@ -389,19 +422,19 @@ def run_analysis_pipeline(session_id: int):
     return async_to_sync(arun_analysis_pipeline)(session_id)
 
 
-def resume_analysis_pipeline(session_id: int, feedback: str = None, checkpoint: str = None):
+def resume_analysis_pipeline(session_id: int, feedback: str = None, checkpoint: str = None, edited_content: dict = None):
     """Resume pipeline from a checkpoint."""
     if checkpoint == "extraction_review":
         return async_to_sync(aresume_from_extraction)(session_id, feedback)
     elif checkpoint == "report_approval":
-        return async_to_sync(aresume_from_report)(session_id, feedback)
+        return async_to_sync(aresume_from_report)(session_id, feedback, edited_content)
     else:
         # Auto-detect based on session state
         session = AnalysisSession.objects.get(pk=session_id)
         if session.approval_checkpoint == "extraction_review":
             return async_to_sync(aresume_from_extraction)(session_id, feedback)
         else:
-            return async_to_sync(aresume_from_report)(session_id, feedback)
+            return async_to_sync(aresume_from_report)(session_id, feedback, edited_content)
 
 
 def get_workflow_state(session_id: int):
