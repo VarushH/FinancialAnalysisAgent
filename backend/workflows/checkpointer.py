@@ -40,16 +40,25 @@ def get_checkpoint_config(session_id: int, checkpoint_id: str = None) -> dict:
     return config
 
 
-def save_state_for_preview(session_id: int, state: dict):
+def save_state_for_preview(session_id, state: dict):
     """Save state to cache for preview access."""
     global _state_cache
-    _state_cache[session_id] = state.copy()
-    print(f"   📦 State cached for session {session_id}")
+    # Ensure session_id is always int for consistent cache keys
+    cache_key = int(session_id) if session_id is not None else None
+    if cache_key is not None:
+        _state_cache[cache_key] = state.copy()
+        print(f"   📦 State cached for session {cache_key}")
+        print(f"   📦 Cached report_path: {state.get('report_path')}")
+        print(f"   📦 All cached session IDs: {list(_state_cache.keys())}")
 
 
-def get_cached_state(session_id: int) -> dict | None:
+def get_cached_state(session_id) -> dict | None:
     """Get cached state for preview."""
-    return _state_cache.get(session_id)
+    # Ensure session_id is always int for consistent cache keys
+    cache_key = int(session_id) if session_id is not None else None
+    print(f"   📦 Looking for session {cache_key}")
+    print(f"   📦 Available cache keys: {list(_state_cache.keys())}")
+    return _state_cache.get(cache_key)
 
 
 def clear_cached_state(session_id: int):

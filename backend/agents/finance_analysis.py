@@ -75,3 +75,4 @@ def process(pages, tables, send_message):
     )
     send_message("Finance analysis completed")
     return analysis
+ 

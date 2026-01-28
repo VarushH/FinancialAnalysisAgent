@@ -94,10 +94,17 @@ async def parallel_analysis_node(state: AgentState) -> AgentState:
     
     if isinstance(compliance_result, dict):
         state["compliance_result"] = compliance_result.get("compliance_result")
+        # CRITICAL: Also copy the audit_report from compliance agent!
+        state["audit_report"] = compliance_result.get("audit_report")
         log_step("PARALLEL", f"Compliance: {state['compliance_result'][:40]}...")
+        if state.get("audit_report"):
+            log_step("PARALLEL", f"Audit report: Score {state['audit_report'].get('compliance_score')}/100")
+        else:
+            log_step("PARALLEL", "Audit report: None (LLM audit may have failed)")
     else:
         log_step("PARALLEL", f"Compliance failed: {compliance_result}")
         state["compliance_result"] = "Compliance check failed"
+        state["audit_report"] = None
     
     state["current_agent"] = "parallel_analysis"
     log_step("PARALLEL", "Done")
@@ -116,7 +123,15 @@ async def report_generation_node(state: AgentState) -> AgentState:
     """Node that generates the final report."""
     log_step("REPORT", "Generating PDF...")
     state = await report_generate_async(state)
-    log_step("REPORT", f"Done - {state.get('report_path')}")
+    
+    # Debug: Check if report_path is set
+    report_path = state.get('report_path')
+    print(f"   📄 REPORT NODE - report_path after generation: {report_path}")
+    if report_path:
+        import os
+        print(f"   📄 REPORT NODE - file exists: {os.path.exists(report_path)}")
+    
+    log_step("REPORT", f"Done - {report_path}")
     
     # Mark that next step requires human approval
     state["pending_checkpoint"] = "report_approval"
@@ -293,8 +308,7 @@ async def aresume_from_extraction(session_id: int, feedback: str = None) -> Agen
         state = await report_generation_node(state)
         state = await report_checkpoint_node(state)
         
-        # Save state
-        checkpointer.put(config, {"channel_values": state})
+        # State is already saved to cache in report_checkpoint_node via save_state_for_preview
         
         print(f"\n✅ Phase 2 complete - Status: {state.get('status')}")
         return state
@@ -319,22 +333,38 @@ async def aresume_from_report(session_id: int, feedback: str = None) -> AgentSta
     
     session = await asyncio.get_event_loop().run_in_executor(None, get_session)
     
-    # Get checkpointer state
-    checkpointer = get_checkpointer()
-    config = get_checkpoint_config(session_id)
+    # Get checkpointer state - try cache first (contains report_path)
+    from .checkpointer import get_cached_state
+    cached_state = get_cached_state(session_id)
     
-    try:
-        checkpoint_data = checkpointer.get(config)
-        if checkpoint_data and "channel_values" in checkpoint_data:
-            state = checkpoint_data["channel_values"]
-            print(f"   Restored state from checkpoint")
-        else:
-            # Minimal state for completion
+    print(f"   📦 Cached state exists: {cached_state is not None}")
+    if cached_state:
+        print(f"   📦 Cached state keys: {list(cached_state.keys())}")
+        print(f"   📦 Cached report_path: {cached_state.get('report_path')}")
+    
+    if cached_state and cached_state.get('report_path'):
+        state = cached_state.copy()
+        print(f"   ✅ Restored state from cache (report_path: {state.get('report_path')})")
+    else:
+        print(f"   ⚠️ Cache miss or no report_path, trying checkpointer...")
+        # Fall back to checkpointer
+        checkpointer = get_checkpointer()
+        config = get_checkpoint_config(session_id)
+        
+        try:
+            checkpoint_data = checkpointer.get(config)
+            if checkpoint_data and "channel_values" in checkpoint_data:
+                state = checkpoint_data["channel_values"]
+                print(f"   Restored state from checkpoint (report_path: {state.get('report_path')})")
+            else:
+                # Minimal state for completion
+                state = create_initial_state(session_id, session.file.path)
+                state["status"] = "completing"
+                print(f"   ⚠️ No checkpoint data, created minimal state")
+        except Exception as e:
+            print(f"   ❌ Checkpoint retrieval failed: {e}")
             state = create_initial_state(session_id, session.file.path)
             state["status"] = "completing"
-    except:
-        state = create_initial_state(session_id, session.file.path)
-        state["status"] = "completing"
     
     if feedback:
         state["human_feedback"] = feedback

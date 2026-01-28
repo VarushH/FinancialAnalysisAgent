@@ -157,8 +157,10 @@ def approve_checkpoint(request, session_id):
             session.refresh_from_db()
             
             if final_state.get('status') == 'completed':
-                session.mark_completed(final_state.get('report_path'))
-                print(f"   ✅ Session marked completed")
+                report_path = final_state.get('report_path')
+                print(f"   → Report path from state: {report_path}")
+                session.mark_completed(report_path)
+                print(f"   ✅ Session marked completed with report: {report_path}")
             elif final_state.get('requires_human_approval'):
                 next_checkpoint = final_state.get('approval_checkpoint', 'unknown')
                 session.mark_awaiting_approval(next_checkpoint)
@@ -229,14 +231,22 @@ def get_session_status(request, session_id):
                         'tables_count': workflow_state.get('table_count', 0),
                     }
                 elif session.approval_checkpoint == 'report_approval':
-                    # Show analysis results
+                    # Show FULL analysis results for approval
                     preview = {
                         'type': 'report',
-                        'title': 'Analysis Results Preview',
+                        'title': 'Full Analysis Report for Approval',
+                        # Text summaries
                         'analysis': workflow_state.get('analysis_result', 'No analysis available'),
                         'compliance': workflow_state.get('compliance_result', 'No compliance check'),
                         'risk': workflow_state.get('risk_result', 'No risk assessment'),
+                        # Full compliance audit report
+                        'audit_report': workflow_state.get('audit_report'),
+                        # Full risk assessment report
+                        'risk_report': workflow_state.get('risk_report'),
+                        # Report file path
                         'report_path': workflow_state.get('report_path'),
+                        # Page count
+                        'pages_count': len(workflow_state.get('pages', [])),
                     }
                 
                 response_data['preview'] = preview
@@ -258,6 +268,11 @@ def download_report(request, session_id):
     """
     session = get_object_or_404(AnalysisSession, pk=session_id)
     
+    # Debug logging
+    print(f"📥 Download request for session {session_id}")
+    print(f"   Status: {session.status}")
+    print(f"   Report file: {session.report_file}")
+    
     if session.status != 'completed':
         return Response({
             'error': 'Report not available',
@@ -265,7 +280,7 @@ def download_report(request, session_id):
         }, status=404)
     
     if not session.report_file:
-        return Response({'error': 'Report file not found'}, status=404)
+        return Response({'error': 'Report file not found', 'debug': 'report_file is empty'}, status=404)
     
     try:
         return FileResponse(

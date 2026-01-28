@@ -41,6 +41,8 @@ daphne -b 0.0.0.0 -p 8000 config.asgi:application
 
 Verify backend
 
+curl -X POST -F "file=D:\Varush\AgentOps\FinancialAnalysisAgent\Data\Acme_FY2024_UltraDense_Report.pdf" http://127.0.0.1:8000/api/upload/
+
 ```
 http://127.0.0.1:8000
 ```
@@ -64,9 +66,9 @@ npm install --save-dev @types/react @types/react-dom
 npm i --save-dev @types/node
 
 Available Endpoints:
-http://127.0.0.1:8000/ - API documentation (home page)
-http://127.0.0.1:8000/admin/ - Django admin panel
-http://127.0.0.1:8000/api/upload/ - Upload financial documents (POST)
-http://127.0.0.1:8000/api/start/<session_id>/ - Start analysis (POST)
-http://127.0.0.1:8000/api/report/<session_id>/ - Download report (GET)
-ws://127.0.0.1:8000/ws/progress/<session_id>/ - WebSocket for progress updates
+![alt text](image-3.png)
+
+
+Workflow:
+
+![alt text](image-4.png)
