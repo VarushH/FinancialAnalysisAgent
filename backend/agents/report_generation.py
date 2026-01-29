@@ -22,7 +22,8 @@ def create_pdf_report(
     risk: str,
     pages_count: int,
     audit_report: dict = None,
-    risk_report: dict = None
+    risk_report: dict = None,
+    financial_extraction: dict = None
 ) -> str:
     """
     Create a professional PDF report with all analysis results.
@@ -110,8 +111,11 @@ def create_pdf_report(
             c.drawCentredString(width/2 + 80, y_scores, f"Risk: {score}/100 ({level})")
             c.setFillColor(colors.black)
     
-    new_page()
+            c.drawCentredString(width/2 + 80, y_scores, f"Risk: {score}/100 ({level})")
+            c.setFillColor(colors.black)
     
+    new_page()
+
     # === FINANCE ANALYSIS ===
     draw_section_header("Finance Analysis")
     c.setFont("Helvetica", 10)
@@ -137,7 +141,128 @@ def create_pdf_report(
         y = check_page(15)
         c.drawString(60, y, line)
         y -= 13
-    y -= 15
+    y -= 15    
+
+    # === DETAILED FINANCIAL EXTRACTION ===
+    if financial_extraction:
+        # Force start on a new page for Detailed Finance Analysis
+        c.showPage()
+        y = height - 50
+        
+        # Main Title for this page
+        c.setFont("Helvetica-Bold", 20)
+        c.setFillColor(colors.HexColor("#2c3e50"))
+        c.drawCentredString(width/2, y, "Detailed Finance Analysis Report")
+        c.setFillColor(colors.black)
+        y -= 40
+        
+        # Financial Summary Section
+        fs = financial_extraction.get('financial_summary', {})
+        if fs:
+            draw_section_header("Financial Performance Summary (FY2024)")
+            
+            # Create a visual box or structured list for key metrics
+            metrics = [
+                ("Total Revenue", fs.get('revenue_2024', 'N/A')),
+                ("Net Income", fs.get('net_income_2024', 'N/A')),
+                ("Total Assets", fs.get('total_assets', 'N/A')),
+                ("Total Liabilities", fs.get('total_liabilities', 'N/A')),
+                ("Total Equity", fs.get('total_equity', 'N/A')),
+                ("Debt-to-Equity Ratio", fs.get('debt_to_equity', 'N/A'))
+            ]
+            
+            # Draw metrics in a 2x2 grid if possible, or list
+            # Let's do a clean list with distinct formatting
+            c.setFont("Helvetica", 10)
+            
+            start_y = y
+            for i, (name, val) in enumerate(metrics):
+                # Check for page break (unlikely at top of new page but good practice)
+                y = check_page(30)
+                
+                # Draw label
+                c.setFont("Helvetica-Bold", 11)
+                c.setFillColor(colors.HexColor("#34495e"))
+                c.drawString(70, y, f"{name}:")
+                
+                # Draw value
+                c.setFont("Helvetica", 11)
+                c.setFillColor(colors.black)
+                # Align value to the right of the label area
+                c.drawString(220, y, str(val))
+                
+                y -= 25 # Spacing between rows
+            
+            y -= 10
+
+        # extracted extraction numbers (Significant Ratios/Figures)
+        numbers = financial_extraction.get('numbers', [])
+        if numbers:
+            draw_subsection("Key Extracted Figures & Ratios")
+            for num in numbers:
+                 y = check_page(15)
+                 c.setFont("Helvetica", 10)
+                 c.drawString(70, y, f"• {num}")
+                 y -= 15
+            y -= 10
+
+        # Important Dates
+        dates = financial_extraction.get('important_dates', [])
+        if dates:
+            draw_subsection(f"Significant Dates ({len(dates)})")
+            
+            # Header
+            if y < 40: y = check_page(40)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(70, y, "Date")
+            c.drawString(180, y, "Event / Context")
+            y -= 5
+            c.line(70, y, width-70, y)
+            y -= 15
+            
+            for date_item in dates:
+                y = check_page(20)
+                d = date_item.get('date', 'N/A')
+                s = date_item.get('significance', 'N/A')
+                
+                c.setFont("Helvetica-Bold", 9)
+                c.drawString(70, y, d)
+                c.setFont("Helvetica", 9)
+                c.drawString(180, y, s)
+                y -= 15
+            y -= 10
+
+        # Companies & Currencies
+        companies = financial_extraction.get('companies', [])
+        currencies = financial_extraction.get('currencies', [])
+        
+        if companies or currencies:
+            draw_subsection("Entities & Currency")
+            
+            if companies:
+                y = check_page(20)
+                c.setFont("Helvetica-Bold", 10)
+                c.drawString(70, y, "Companies Mentioned:")
+                y -= 15
+                c.setFont("Helvetica", 10)
+                comp_str = ", ".join(companies)
+                for line in _wrap_text(comp_str, 80):
+                    y = check_page(15)
+                    c.drawString(85, y, line)
+                    y -= 12
+                y -= 10
+                
+            if currencies:
+                y = check_page(20)
+                c.setFont("Helvetica-Bold", 10)
+                c.drawString(70, y, "Reporting Currencies:")
+                c.setFont("Helvetica", 10)
+                c.drawString(200, y, ", ".join(currencies))
+                y -= 20
+
+        # End of Detailed Section, add a separator or just space
+        y -= 20
+
     
     # === DETAILED COMPLIANCE AUDIT ===
     if audit_report:
@@ -435,7 +560,8 @@ async def process_async(state: AgentState) -> AgentState:
         risk,
         len(pages),
         audit_report,
-        risk_report
+        risk_report,
+        state.get("financial_extraction")
     )
     report_path = await loop.run_in_executor(None, pdf_func)
     

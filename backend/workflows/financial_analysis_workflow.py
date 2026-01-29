@@ -87,6 +87,8 @@ async def parallel_analysis_node(state: AgentState) -> AgentState:
     # Merge results
     if isinstance(finance_result, dict):
         state["analysis_result"] = finance_result.get("analysis_result")
+        # CRITICAL: Copy extracted financial data
+        state["financial_extraction"] = finance_result.get("financial_extraction")
         log_step("PARALLEL", f"Finance: {state['analysis_result'][:40]}...")
     else:
         log_step("PARALLEL", f"Finance failed: {finance_result}")
