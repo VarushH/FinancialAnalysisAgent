@@ -21,12 +21,13 @@ from api.models import AnalysisSession
 from .state import AgentState, create_initial_state, add_message
 from .checkpointer import get_checkpointer, get_checkpoint_config, save_state_for_preview
 
-# Import async agent functions
-from agents.document_extraction import process_async as doc_extract_async
-from agents.finance_analysis import process_async as finance_analyze_async
-from agents.compliance import process_async as compliance_check_async
-from agents.risk_assessment import process_async as risk_assess_async
-from agents.report_generation import process_async as report_generate_async
+# ... (imports removed)
+# Import async agent functions - MOVED TO INSIDE NODES TO AVOID CIRCULAR IMPORTS
+# from agents.document_extraction import process_async as doc_extract_async
+# from agents.finance_analysis import process_async as finance_analyze_async
+# from agents.compliance import process_async as compliance_check_async
+# from agents.risk_assessment import process_async as risk_assess_async
+# from agents.report_generation import process_async as report_generate_async
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def log_step(step_name: str, message: str):
 async def document_extraction_node(state: AgentState) -> AgentState:
     """Node that performs document extraction."""
     log_step("DOC EXTRACT", "Starting...")
+    from agents.document_extraction import process_async as doc_extract_async
     state = await doc_extract_async(state)
     pages_count = len(state.get('pages', []))
     log_step("DOC EXTRACT", f"Done - {pages_count} pages")
@@ -78,6 +80,9 @@ async def parallel_analysis_node(state: AgentState) -> AgentState:
     compliance_state = state.copy()
     
     # Run in parallel
+    from agents.finance_analysis import process_async as finance_analyze_async
+    from agents.compliance import process_async as compliance_check_async
+    
     finance_result, compliance_result = await asyncio.gather(
         finance_analyze_async(finance_state),
         compliance_check_async(compliance_state),
@@ -116,6 +121,7 @@ async def parallel_analysis_node(state: AgentState) -> AgentState:
 async def risk_assessment_node(state: AgentState) -> AgentState:
     """Node that performs risk assessment."""
     log_step("RISK", "Starting...")
+    from agents.risk_assessment import process_async as risk_assess_async
     state = await risk_assess_async(state)
     log_step("RISK", f"Done - {state.get('risk_result', 'N/A')[:40]}")
     return state
@@ -124,6 +130,7 @@ async def risk_assessment_node(state: AgentState) -> AgentState:
 async def report_generation_node(state: AgentState) -> AgentState:
     """Node that generates the final report."""
     log_step("REPORT", "Generating PDF...")
+    from agents.report_generation import process_async as report_generate_async
     state = await report_generate_async(state)
     
     # Debug: Check if report_path is set
@@ -228,10 +235,12 @@ def clear_workflow_cache():
 
 # --- Public API ---
 
-async def arun_analysis_pipeline(session_id: int) -> AgentState:
+async def arun_analysis_pipeline(session_id: int, user_query: str = None) -> AgentState:
     """Run the analysis pipeline - first phase until extraction checkpoint."""
     print(f"\n{'='*50}")
     print(f"STARTING PIPELINE - Session {session_id}")
+    if user_query:
+        print(f"USER QUERY: {user_query}")
     print(f"{'='*50}")
     
     # Get session
@@ -243,7 +252,7 @@ async def arun_analysis_pipeline(session_id: int) -> AgentState:
     print(f"File: {session.file.path}")
     
     # Create initial state
-    state = create_initial_state(session_id, session.file.path)
+    state = create_initial_state(session_id, session.file.path, user_query=user_query)
     
     # Get compiled workflow
     app = get_compiled_workflow()
@@ -264,6 +273,16 @@ async def arun_analysis_pipeline(session_id: int) -> AgentState:
         state["status"] = "failed"
         state["error"] = str(e)
         return state
+
+
+# ... (rest of the file)
+
+
+# --- Sync Wrappers ---
+
+def run_analysis_pipeline(session_id: int, user_query: str = None):
+    """Synchronous wrapper - runs phase 1."""
+    return async_to_sync(arun_analysis_pipeline)(session_id, user_query)
 
 
 async def aresume_from_extraction(session_id: int, feedback: str = None) -> AgentState:
@@ -417,11 +436,7 @@ async def aresume_from_report(session_id: int, feedback: str = None, edited_cont
         return state
 
 
-# --- Sync Wrappers ---
 
-def run_analysis_pipeline(session_id: int):
-    """Synchronous wrapper - runs phase 1."""
-    return async_to_sync(arun_analysis_pipeline)(session_id)
 
 
 def resume_analysis_pipeline(session_id: int, feedback: str = None, checkpoint: str = None, edited_content: dict = None):

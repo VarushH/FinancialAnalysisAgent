@@ -29,6 +29,10 @@ class AgentState(TypedDict, total=False):
     risk_result: Optional[str]
     report_path: Optional[str]
     
+    # RAG Interactive
+    user_query: Optional[str]
+    rag_response: Optional[str]
+    
     # Workflow control
     current_agent: str
     next_agent: str
@@ -53,12 +57,14 @@ class AgentState(TypedDict, total=False):
     updated_at: str
 
 
-def create_initial_state(session_id: int, file_path: str) -> AgentState:
+def create_initial_state(session_id: int, file_path: str, user_query: Optional[str] = None) -> AgentState:
     """Create initial state for a new workflow run."""
     now = datetime.utcnow().isoformat()
     return AgentState(
         session_id=session_id,
         file_path=file_path,
+        user_query=user_query,
+        rag_response=None,
         pages=[],
         tables=[],
         table_count=0,

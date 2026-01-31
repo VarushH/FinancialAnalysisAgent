@@ -69,11 +69,14 @@ def start_analysis(request, session_id):
     
     session.mark_processing()
     
+    # Get optional user query
+    user_query = request.data.get('query')
+    
     # Run pipeline in background thread
     def run_pipeline():
         try:
             print(f"\n🔧 Running pipeline for session {session_id}...")
-            final_state = run_analysis_pipeline(session_id)
+            final_state = run_analysis_pipeline(session_id, user_query)
             
             print(f"   Final state status: {final_state.get('status')}")
             print(f"   Requires approval: {final_state.get('requires_human_approval')}")

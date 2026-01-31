@@ -106,6 +106,9 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [sessionId]);
 
+  // Query state
+  const [userQuery, setUserQuery] = useState('');
+
   // Upload file and start analysis
   const handleFileUpload = async (file: File) => {
     const data = new FormData();
@@ -116,7 +119,12 @@ const App: React.FC = () => {
     setSessionId(String(id));
     setMessages(['📤 File uploaded successfully']);
 
-    await fetch(`/api/sessions/${id}/start/`, { method: 'POST' });
+    // Pass optional query to start endpoint
+    await fetch(`/api/sessions/${id}/start/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: userQuery })
+    });
     setMessages(prev => [...prev, '🚀 Analysis started']);
   };
 
@@ -234,9 +242,33 @@ const App: React.FC = () => {
       <h1>📊 Financial Analysis Agent</h1>
       <p className="subtitle">Supervisor Agent Architecture with Human-in-the-Loop</p>
 
-      {!sessionId && <UploadForm onUpload={handleFileUpload} />}
-
-      {sessionId && (
+      {!sessionId ? (
+        <div className="upload-section-wrapper">
+          <UploadForm onUpload={handleFileUpload} />
+          <div className="query-input-section" style={{ marginTop: '20px', maxWidth: '600px', margin: '20px auto' }}>
+            <label htmlFor="userQuery" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              Ask a specific question (Optional):
+            </label>
+            <input
+              type="text"
+              id="userQuery"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              placeholder="e.g. What is the consolidated revenue for 2024?"
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid #ccc'
+              }}
+            />
+            <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+              If provided, the agent will use RAG to answer this specific question.
+            </small>
+          </div>
+        </div>
+      ) : (
+        // Session Info when running
         <div className="session-info">
           <div className="session-badge">Session #{sessionId}</div>
           {status && (
