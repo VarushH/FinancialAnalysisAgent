@@ -65,6 +65,12 @@ npm install react react-dom react-scripts
 npm install --save-dev @types/react @types/react-dom
 npm i --save-dev @types/node
 
+
+
+Open a terminal in the project root.
+Run: docker-compose up --build
+Access the app at http://localhost.
+
 Available Endpoints:
 ![alt text](image-3.png)
 

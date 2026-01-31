@@ -21,7 +21,8 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project
-COPY . /app/
+# Since context is root, we copy the backend folder contents to /app
+COPY backend /app/
 
 # Expose port
 EXPOSE 8000
