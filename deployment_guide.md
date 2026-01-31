@@ -38,6 +38,12 @@ The `render.yaml` sets up most defaults, but for security, some keys were not co
     *   `QDRANT_URL`: Your Qdrant Cluster URL.
     *   `OPENAI_API_KEY`: (If used anywhere else).
 
+4.  **Critical Step: Link Frontend to Backend**
+    *   Once the **Backend Service** is deployed, copy its URL (e.g., `https://financial-agent-backend-xxxx.onrender.com`).
+    *   Go to the **financial-agent-frontend** service -> **Environment**.
+    *   Update `REACT_APP_API_URL` with the backend URL you just copied. 
+    *   **Redeploy** the frontend service for this change to take effect.
+
 ## Step 4: Verify Deployment
 
 1.  Wait for the builds to finish. The frontend build might take a few minutes.
