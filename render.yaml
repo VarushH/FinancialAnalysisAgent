@@ -31,6 +31,5 @@ services:
     envVars:
       - key: REACT_APP_API_URL
         value: https://financial-agent-backend.onrender.com # Placeholder - UPDATE THIS in Dashboard after backend deploy
-        sync: false
 
 version: "1"
