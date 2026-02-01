@@ -26,12 +26,11 @@ COPY --from=build /app/build /usr/share/nginx/html
 # Copy manifest/template
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
+# Copy custom entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 10000
 
-# Environment variables to substitute (explicitly listing them is not strictly needed if we use output redirection, 
-# but Nginx 1.19+ has built-in templating support!)
-# Nginx Docker image automatically runs envsubst on /etc/nginx/templates/*.template 
-# and outputs to /etc/nginx/conf.d/*.conf if NGINX_ENVSUBST_OUTPUT_DIR is default.
-# We just need to ensure the variables are passed.
-
-CMD ["nginx", "-g", "daemon off;"]
+# Use custom entrypoint to handle advanced variable substitution
+ENTRYPOINT ["/entrypoint.sh"]
