@@ -27,6 +27,9 @@ COPY backend /app/
 # Expose port
 EXPOSE 8000
 
+# Copy entrypoint script (assuming it's in the backend folder locally)
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Run server
-# Run server using daphne for ASGI/WebSocket support
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+ENTRYPOINT ["/entrypoint.sh"]
