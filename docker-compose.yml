@@ -29,7 +29,7 @@ services:
       context: ./frontend
     container_name: finance_agent_frontend
     ports:
-      - "80:80"
+      - "80:10000"
     depends_on:
       backend:
         condition: service_healthy
