@@ -118,12 +118,49 @@ def create_pdf_report(
 
     # === FINANCE ANALYSIS ===
     draw_section_header("Finance Analysis")
+    
+    # Split Analysis and RAG Q&A if present
+    rag_delimiter = "[RAG Q&A]"
+    main_analysis = analysis
+    rag_content = None
+    
+    
+    if rag_delimiter in analysis:
+        print(f"      ✅ Found RAG delimiter in analysis (len={len(analysis)})")
+        parts = analysis.split(rag_delimiter)
+        main_analysis = parts[0].strip()
+        if len(parts) > 1:
+            rag_content = parts[1].strip()
+            print(f"      ✅ Extracted RAG content (len={len(rag_content)})")
+        else:
+            print("      ⚠️ RAG delimiter found but no content after it")
+    else:
+        print(f"      ⚠️ RAG delimiter '{rag_delimiter}' NOT found in analysis (len={len(analysis)})")
+        # Fallback: check if it's just missing the exact delimiter string but has content
+        if "Q:" in analysis and "A:" in analysis:
+             print("      ⚠️ Potential RAG content found without delimiter, trying heuristics...")
+    
     c.setFont("Helvetica", 10)
-    for line in _wrap_text(analysis, 90):
+    for line in _wrap_text(main_analysis, 90):
         y = check_page(15)
         c.drawString(60, y, line)
         y -= 13
     y -= 15
+
+    # === RAG Q&A SECTION ===
+    if rag_content:
+        draw_subsection("Q&A with Finance Agent")
+        c.setFont("Helvetica", 10)
+        # Handle newlines in RAG content for better readability
+        for paragraph in rag_content.split('\n'):
+            if not paragraph.strip():
+                continue
+            for line in _wrap_text(paragraph, 90):
+                y = check_page(15)
+                c.drawString(60, y, line)
+                y -= 13
+            y -= 5 # Extra space between paragraphs
+        y -= 10
     
     # === COMPLIANCE CHECK ===
     draw_section_header("Compliance Check")

@@ -278,13 +278,15 @@ async def process_async(state: AgentState) -> AgentState:
             state["rag_response"] = rag_response
             
             # Also append to analysis_result so it shows up in report/UI
-            state["analysis_result"] = state.get("analysis_result", "") + f"\n\n[RAG Q&A]\n{rag_response}"
+            current_analysis = state.get("analysis_result") or ""
+            state["analysis_result"] = current_analysis + f"\n\n[RAG Q&A]\n{rag_response}"
         else:
             print("      ⚠️ RAG Retrieval returned no results.")
             state["rag_response"] = "RAG retrieved no context for the query."
             
     except Exception as e:
         print(f"      ❌ RAG Pipeline failed: {e}")
+        state["rag_response"] = f"RAG Pipeline encountered an error: {str(e)}"
         # Don't fail the whole agent for this demo feature, just log it
     
     # Run LLM Extraction (Existing Logic)
