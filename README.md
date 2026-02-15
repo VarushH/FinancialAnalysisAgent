@@ -68,7 +68,16 @@ npm i --save-dev @types/node
 
 
 Open a terminal in the project root.
-Run: docker-compose up --build
+# Run: docker-compose up --build
+docker compose -p finapp up -d --build (New methos)
+# Check running containers
+docker compose -p finapp ps
+# View logs if something isn't working
+docker compose -p finapp logs -f
+# Stop containers (keeps them for restart later)
+docker compose -p finapp stop
+# Stop AND remove containers + networks (full cleanup)
+docker compose -p finapp down
 Access the app at http://localhost.
 
 Available Endpoints:

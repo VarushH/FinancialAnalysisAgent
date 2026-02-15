@@ -58,9 +58,6 @@ urlpatterns = [
     # Legacy endpoints for backward compatibility
     path('api/start/<int:session_id>/', views.start_analysis, name='start_analysis_legacy'),
     path('api/report/<int:session_id>/', views.download_report, name='download_report_legacy'),
-
-    # Silence favicon.ico 404s
-    path('favicon.ico', lambda r: JsonResponse({'status': 'ok'})), # Or just empty response, but JSON is fine since we import JsonResponse
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

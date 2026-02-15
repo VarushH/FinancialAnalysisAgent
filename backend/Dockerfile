@@ -27,9 +27,5 @@ COPY backend /app/
 # Expose port
 EXPOSE 8000
 
-# Copy entrypoint script (assuming it's in the backend folder locally)
-COPY backend/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 # Run server
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

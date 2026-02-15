@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+#Temp files
+manual_execution_guide.md
+vps_deployment.md
+image-1.png
+image-2.png
+image-3.png
+image-4.png
+image.png
+
 # Distribution / packaging
 frontend/node_modules/
 node_modules/

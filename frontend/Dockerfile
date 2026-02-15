@@ -17,20 +17,12 @@ RUN npm run build
 # Stage 2: Serve
 FROM nginx:alpine
 
-# Install gettext for envsubst
-RUN apk add --no-cache gettext
-
 # Copy build artifacts
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Copy manifest/template
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy custom entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+EXPOSE 80
 
-EXPOSE 10000
-
-# Use custom entrypoint to handle advanced variable substitution
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
