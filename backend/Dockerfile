@@ -11,7 +11,6 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     curl \
-    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory
@@ -25,14 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Since context is root, we copy the backend folder contents to /app
 COPY backend /app/
 
-# Make entrypoint executable
-# RUN chmod +x /app/entrypoint.sh
-
-# Fix line endings (Windows CRLF → Linux LF) and make executable
-RUN dos2unix /app/entrypoint.sh && chmod +x /app/entrypoint.sh
-
 # Expose port
 EXPOSE 8000
 
-# Use entrypoint script (runs migrations then starts server)
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Run migrations then start server (inline, no shell script needed)
+CMD ["sh", "-c", "python manage.py migrate && daphne -b 0.0.0.0 -p 8000 config.asgi:application"]
