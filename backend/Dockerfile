@@ -24,8 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Since context is root, we copy the backend folder contents to /app
 COPY backend /app/
 
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
-# Run server
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Use entrypoint script (runs migrations then starts server)
+ENTRYPOINT ["/app/entrypoint.sh"]
