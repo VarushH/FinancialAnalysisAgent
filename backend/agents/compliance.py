@@ -127,7 +127,16 @@ def run_compliance_audit(text_list: List[str], tables_list: List = None) -> Opti
 async def process_async(state: AgentState) -> AgentState:
     """
     Async process function for compliance checking.
-    Combines forbidden terms scanning with LLM-based regulatory audit.
+    
+    1. Scans document text for basic forbidden terms (fraud, bribery, etc.).
+    2. Uses LLM to perform a deep regulatory compliance audit (IFRS/SOX).
+    3. Updates state with 'compliance_result' and detailed 'audit_report'.
+
+    Args:
+        state (AgentState): Current workflow state.
+
+    Returns:
+        AgentState: Updated state with compliance findings.
     """
     print("\n   ⚖️  COMPLIANCE AGENT")
     print("   " + "-"*40)

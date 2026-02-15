@@ -561,6 +561,16 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
 async def process_async(state: AgentState) -> AgentState:
     """
     Async process function for report generation.
+    
+    1. Aggregates analysis results (finance, compliance, risk).
+    2. Generates a comprehensive PDF report using ReportLab.
+    3. Updates state with the report path and marks workflow as completed.
+
+    Args:
+        state (AgentState): Current workflow state.
+
+    Returns:
+        AgentState: Updated state with 'report_path' and 'status'.
     """
     print("\n   📝 REPORT GENERATION AGENT")
     print("   " + "-"*40)

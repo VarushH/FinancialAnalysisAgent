@@ -95,40 +95,7 @@ Financial Analysis Agent is a full-stack application that leverages a **Supervis
 
 ## 📐 Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (React)                     │
-│              Upload PDF → Track Progress → Download Report  │
-│                    WebSocket    REST API                     │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                   Backend (Django + Daphne)                  │
-│                                                             │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              LangGraph Supervisor Workflow             │  │
-│  │                                                       │  │
-│  │  📄 Document Extraction                               │  │
-│  │        ↓                                              │  │
-│  │  🔔 Human Review Checkpoint                           │  │
-│  │        ↓                                              │  │
-│  │  ┌──────────────────┬──────────────────┐              │  │
-│  │  │ 💰 Finance       │ ⚖️ Compliance    │ (parallel)   │  │
-│  │  │   Analysis       │    Check         │              │  │
-│  │  └──────────────────┴──────────────────┘              │  │
-│  │        ↓                                              │  │
-│  │  📊 Risk Assessment                                   │  │
-│  │        ↓                                              │  │
-│  │  📝 Report Generation                                 │  │
-│  │        ↓                                              │  │
-│  │  🔔 Final Approval Checkpoint                         │  │
-│  │        ↓                                              │  │
-│  │  ✅ Complete → Download PDF                            │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                             │
-│  Vector Store (Qdrant) ←→ LLMs (Gemini / Groq)             │
-└─────────────────────────────────────────────────────────────┘
-```
+![Architecture Diagram](Supporting%20Documents/architecture.png)
 
 ---
 

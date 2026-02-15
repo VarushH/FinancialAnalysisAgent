@@ -176,6 +176,16 @@ def index_to_qdrant(pages: list[str], session_id: int) -> None:
 async def process_async(state: AgentState) -> AgentState:
     """
     Async process function for document extraction.
+    
+    1. Extracts text and tables from the PDF file specified in state.
+    2. Indexes the extracted content into Qdrant for vector search.
+    3. Updates the state with 'pages', 'tables', and 'table_count'.
+
+    Args:
+        state (AgentState): Current workflow state containing 'file_path' and 'session_id'.
+
+    Returns:
+        AgentState: Updated state with extracted content.
     """
     print("\n   📄 DOCUMENT EXTRACTION AGENT")
     print("   " + "-"*40)

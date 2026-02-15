@@ -279,7 +279,16 @@ def run_risk_assessment_engine(tables: List) -> Optional[RiskAssessmentReport]:
 async def process_async(state: AgentState) -> AgentState:
     """
     Async process function for risk assessment.
-    Combines keyword-based scanning with RiskAssessmentEngine analysis.
+    
+    1. Scans document text for predefined risk keywords (high/medium/low).
+    2. Uses quantitative RiskAssessmentEngine to analyze financial ratios and anomalies.
+    3. Combines findings into a comprehensive 'risk_result' and structured 'risk_report'.
+
+    Args:
+        state (AgentState): Current workflow state.
+
+    Returns:
+        AgentState: Updated state with risk assessment.
     """
     print("\n   📊 RISK ASSESSMENT AGENT")
     print("   " + "-"*40)

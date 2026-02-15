@@ -15,7 +15,9 @@ image-3.png
 image-4.png
 image.png
 backend/entrypoint.sh
-
+financialdocprocessing.ipynb
+advanced_rag.ipynb
+media/
 # Distribution / packaging
 frontend/node_modules/
 node_modules/

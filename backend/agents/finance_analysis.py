@@ -62,9 +62,19 @@ llm = ChatGroq(
 
 def setup_rag_pipeline(pages: List[str], collection_name: str = "financeagent"):
     """
-    Sets up the RAG pipeline with ParentDocumentRetriever and Qdrant.
-    Returns the configured retriever.
+    Sets up the RAG pipeline with Qdrant vector store.
+    
+    Indexes the provided document pages into a Qdrant collection using HuggingFace embeddings.
+    Returns a retriever object that can be used to query the document content.
+
+    Args:
+        pages (List[str]): List of text content from document pages.
+        collection_name (str): The name of the Qdrant collection to use/create.
+
+    Returns:
+        VectorStoreRetriever: A LangChain retriever initialized with the document index.
     """
+
     print(f"      Initializing RAG pipeline for collection: {collection_name}")
     
     # 1. Setup splitters
@@ -219,6 +229,18 @@ def extract_with_llm(text_list, tables_list_dicts):
 async def process_async(state: AgentState) -> AgentState:
     """
     Async process function for finance analysis.
+    
+    Orchestrates the financial analysis workflow:
+    1. Indexes document pages into Qdrant for RAG.
+    2. Uses RAG to answer specific financial queries.
+    3. Extracts structured financial data using LLM.
+    4. Updates state with analysis results and RAG findings.
+
+    Args:
+        state (AgentState): Current workflow state.
+
+    Returns:
+        AgentState: Updated state with 'analysis_result', 'rag_response', and 'financial_extraction'.
     """
     print("\n   💰 FINANCE ANALYSIS AGENT")
     print("   " + "-"*40)

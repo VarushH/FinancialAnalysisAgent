@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const ws = useRef<WebSocket | null>(null);
 
   // Handle WebSocket messages
+  // Connects to the backend Django Channels consumer to receive real-time updates
   useEffect(() => {
     if (!sessionId) return;
     // Local
@@ -116,6 +117,8 @@ const App: React.FC = () => {
   const [userQuery, setUserQuery] = useState('');
 
   // Upload file and start analysis
+  // 1. Uploads file to /api/upload/ -> gets session_id
+  // 2. Calls /api/sessions/{id}/start/ with optional user query
   const handleFileUpload = async (file: File) => {
     const data = new FormData();
     data.append('file', file);
@@ -135,6 +138,8 @@ const App: React.FC = () => {
   };
 
   // Approve checkpoint
+  // Sends approval signal to backend to resume workflow.
+  // Can include edited content if at 'report_approval' stage.
   const handleApprove = async () => {
     if (!sessionId) return;
     setIsApproving(true);
@@ -184,6 +189,7 @@ const App: React.FC = () => {
   };
 
   // Render preview section
+  // Dynamically renders content based on checkpoint type (extraction vs report)
   const renderPreview = () => {
     if (!status?.preview) return null;
     const preview = status.preview;
