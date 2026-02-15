@@ -46,8 +46,14 @@ const App: React.FC = () => {
   // Handle WebSocket messages
   useEffect(() => {
     if (!sessionId) return;
+    // Local
+    // const wsUrl = `${process.env.REACT_APP_WS_URL || 'ws://localhost:8000'}/ws/progress/${sessionId}/`;
+    // VPS
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = process.env.REACT_APP_WS_URL || `${wsProtocol}//${window.location.host}`;
+    const wsUrl = `${wsHost}/ws/progress/${sessionId}/`;
 
-    const wsUrl = `${process.env.REACT_APP_WS_URL || 'ws://localhost:8000'}/ws/progress/${sessionId}/`;
+    
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onmessage = (event) => {
