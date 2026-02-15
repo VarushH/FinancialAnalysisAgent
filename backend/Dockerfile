@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     curl \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory
@@ -25,7 +26,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend /app/
 
 # Make entrypoint executable
-RUN chmod +x /app/entrypoint.sh
+# RUN chmod +x /app/entrypoint.sh
+
+# Fix line endings (Windows CRLF → Linux LF) and make executable
+RUN dos2unix /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 8000
