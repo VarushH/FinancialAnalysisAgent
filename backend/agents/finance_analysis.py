@@ -21,6 +21,7 @@ from langchain_qdrant import QdrantVectorStore
 from langchain_classic.retrievers import ParentDocumentRetriever
 from langchain_core.stores import InMemoryStore
 from qdrant_client import QdrantClient
+from django.conf import settings
 
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
@@ -52,7 +53,7 @@ parser = PydanticOutputParser(pydantic_object=ExtractionResult)
 # Note: In a real production environment, API keys should be in settings/env vars.
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
-    api_key="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",
+    api_key=settings.GROQ_API_KEY,
     temperature=0.2,
     timeout=None,
     max_retries=2
@@ -85,9 +86,11 @@ def setup_rag_pipeline(pages: List[str], collection_name: str = "financeagent"):
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     
     # 3. Setup Qdrant Client
+    
+
     qdrant_client = QdrantClient(
-        url="https://4c010b82-d53c-4962-97b9-9867f9d069f2.us-east4-0.gcp.cloud.qdrant.io:6333", 
-        api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.mw8oTjlxu8i-qonqbS6asPk3aCSSHoxkvLEjRGXYJLQ",
+        url=settings.QDRANT_URL, 
+        api_key=settings.QDRANT_API_KEY,
     )
     
     # Check/Create Collection
@@ -153,7 +156,7 @@ def expand_query(query: str):
 
     query_expansion_model = ChatGroq(
         model="openai/gpt-oss-120b",
-        api_key="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",
+        api_key=settings.GROQ_API_KEY,
         temperature=0.3,
         timeout=None,
         max_retries=2

@@ -11,9 +11,18 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os 
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR.parent / '.env') # Load environment variables from .env file
+
+# External Services API Keys
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+QDRANT_URL = os.environ.get('QDRANT_URL', '')
+QDRANT_API_KEY = os.environ.get('QDRANT_API_KEY', '')
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -48,6 +57,7 @@ INSTALLED_APPS = [
     # Local
     "api",
 ]
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', #Enable CORS for all origins
@@ -140,3 +150,38 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # CORS (allow frontend access)
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Logging Configuration
+# Ensure logs are printed to console so Datadog Agent can collect them via Docker socket
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}

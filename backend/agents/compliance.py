@@ -8,10 +8,11 @@ Performs LLM-based regulatory compliance audits (IFRS, SOX 404).
 import asyncio
 import os
 from typing import List, Optional
+from django.conf import settings
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-
+from langchain_groq import ChatGroq
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
 
@@ -55,14 +56,14 @@ FORBIDDEN_TERMS = [
 def _get_compliance_llm():
     """Get the LLM for compliance auditing."""
     try:
-        from langchain_groq import ChatGroq
-        api_key = os.getenv("GROQ_API_KEY", "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")
-        print(f"      → Initializing Groq LLM with key: {api_key[:10]}...{api_key[-4:]}")
+        
+        api_key = settings.GROQ_API_KEY
+        print(f"      → Initializing Groq LLM using settings key")
         return ChatGroq(
             model="llama-3.3-70b-versatile",  # Valid Groq model
             api_key=api_key,
             temperature=0.2,
-            timeout=60,
+            timeout=120,
             max_retries=2
         )
     except Exception as e:

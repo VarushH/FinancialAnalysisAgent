@@ -12,6 +12,7 @@ import pdfplumber
 from langchain_huggingface import HuggingFaceEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
+from django.conf import settings
 
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
@@ -125,8 +126,8 @@ def index_to_qdrant(pages: list[str], session_id: int) -> None:
         
 
         client = QdrantClient(
-            url="https://4c010b82-d53c-4962-97b9-9867f9d069f2.us-east4-0.gcp.cloud.qdrant.io:6333", 
-            api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.mw8oTjlxu8i-qonqbS6asPk3aCSSHoxkvLEjRGXYJLQ",
+            url=settings.QDRANT_URL, 
+            api_key=settings.QDRANT_API_KEY,
         )
 
         vector_size = len(EMBED_MODEL.embed_query("test"))

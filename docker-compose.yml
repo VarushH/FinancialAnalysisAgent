@@ -12,8 +12,9 @@ services:
       - ./backups:/app/backups # Persist backups if needed, though mostly using Qdrant cloud
     environment:
       - PYTHONUNBUFFERED=1
-      # Add API keys here or use .env file
-      # - OPENAI_API_KEY=${OPENAI_API_KEY} 
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - QDRANT_URL=${QDRANT_URL}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
       interval: 30s

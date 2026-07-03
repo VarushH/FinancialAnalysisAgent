@@ -113,7 +113,6 @@ Financial Analysis Agent is a full-stack application that leverages a **Supervis
 You will need API keys for the following services. Create a `.env` file in the project root (or in `backend/`) with:
 
 ```env
-GOOGLE_API_KEY=your_google_gemini_api_key
 GROQ_API_KEY=your_groq_api_key
 QDRANT_URL=your_qdrant_cloud_url        # or use localhost for local Qdrant
 QDRANT_API_KEY=your_qdrant_api_key      # if using Qdrant Cloud
