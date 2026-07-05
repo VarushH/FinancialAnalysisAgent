@@ -17,11 +17,6 @@ from django.conf import settings
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
 
-# Initialize embedding model
-print("   📦 Loading HuggingFace embedding model...")
-EMBED_MODEL = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-print("   ✅ Embedding model loaded")
-
 
 def extract_text_and_tables(pdf_path: str) -> tuple[list[str], int, list]:
     """
@@ -112,67 +107,6 @@ def extract_text_and_tables(pdf_path: str) -> tuple[list[str], int, list]:
 #     return all_text,table_count, all_tables
 
 
-def index_to_qdrant(pages: list[str], session_id: int) -> None:
-    """
-    Index document pages to Qdrant vector store.
-    """
-    try:
-        print(f"      → Connecting to Qdrant...")
-        # client = QdrantClient(
-        #     host=os.getenv('QDRANT_HOST', 'localhost'),
-        #     port=int(os.getenv('QDRANT_PORT', 6333)),
-        #     timeout=5
-        # )
-        
-
-        client = QdrantClient(
-            url=settings.QDRANT_URL, 
-            api_key=settings.QDRANT_API_KEY,
-        )
-
-        vector_size = len(EMBED_MODEL.embed_query("test"))
-        print(f"      → Vector size: {vector_size}")
-        
-        try:
-            
-            collection_name = "financeagent"
-            if not client.collection_exists(collection_name=collection_name):
-                print(f"      → Collection does not exist, Creating Collection {collection_name}")
-                # log.info("Collection does not exist, Creating Collection", collection_name=collection_name)
-                client.create_collection(collection_name, 
-                                  vectors_config={
-                                    "size": 384,
-                                    "distance": "Cosine"
-                                  }
-                                  )
-            else:
-                print(f"      → Collection already exists {collection_name}")
-                # log.info("Collection already exists", collection_name=collection_name)
-            print(f"      → Created/recreated collection '{collection_name}'")
-        except Exception as e:
-            print(f"      → Error while creating collection: {e}")
-            pass
-        
-        points = []
-        for idx, text in enumerate(pages):
-            # Generate vector embedding for the current page content
-            vector = EMBED_MODEL.embed_query(text)
-            
-            # Create a point with a unique ID and metadata payload for Qdrant
-            point = {
-                "id": session_id * 1000 + idx,
-                "vector": vector,
-                "payload": {"session": session_id, "content": text[:500]}
-            }
-            points.append(point)
-        
-        if points:
-            client.upsert(collection_name=collection_name, points=points)
-            print(f"      → Indexed {len(points)} vectors to Qdrant")
-    except Exception as e:
-        print(f"      ⚠️  Qdrant indexing skipped (not available): {e}")
-
-
 @agent_retry(agent_name="document_extraction")
 async def process_async(state: AgentState) -> AgentState:
     """
@@ -211,7 +145,6 @@ async def process_async(state: AgentState) -> AgentState:
     
     # Index to Qdrant (optional)
     session_id = state.get("session_id", 0)
-    await loop.run_in_executor(None, index_to_qdrant, pages, session_id)
     
     # Update state
     state["pages"] = pages
@@ -234,7 +167,6 @@ def process(session, send_message):
     send_message("Document extraction started")
     file_path = session.file.path
     pages, table_count, tables = extract_text_and_tables(file_path)
-    index_to_qdrant(pages, session.id)
     session.pages = pages
     session.table_count = table_count
     session.send_message = send_message

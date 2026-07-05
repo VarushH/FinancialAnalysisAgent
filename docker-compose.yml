@@ -10,6 +10,7 @@ services:
     volumes:
       - ./backend:/app
       - ./backups:/app/backups # Persist backups if needed, though mostly using Qdrant cloud
+      - hf_cache:/root/.cache/huggingface # Persist downloaded models (embeddings + cross-encoder) across rebuilds
     environment:
       - PYTHONUNBUFFERED=1
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -39,3 +40,6 @@ services:
 networks:
   financial-agent-net:
     driver: bridge
+
+volumes:
+  hf_cache:

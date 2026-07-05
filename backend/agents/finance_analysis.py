@@ -21,10 +21,44 @@ from langchain_qdrant import QdrantVectorStore
 from langchain_classic.retrievers import ParentDocumentRetriever
 from langchain_core.stores import InMemoryStore
 from qdrant_client import QdrantClient
+from sentence_transformers import CrossEncoder
 from django.conf import settings
 
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
+
+
+# --- Cross-Encoder Re-ranker (lazy singleton) ---
+_reranker = None
+
+def _get_reranker():
+    """Load the cross-encoder once, on first use (keeps Django startup fast)."""
+    global _reranker
+    if _reranker is None:
+        print("   📦 Loading cross-encoder re-ranker...")
+        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        print("   ✅ Re-ranker loaded")
+    return _reranker
+
+
+def rerank_documents(query: str, documents: list, top_n: int = 4) -> list:
+    """
+    Re-score retrieved documents against the query with a cross-encoder and return
+    the top_n most relevant.
+
+    Bi-encoder retrieval (the embedding search) scores query and passage separately,
+    so it's fast over the whole corpus but coarse. A cross-encoder reads (query, passage)
+    TOGETHER, so it judges relevance far more accurately — but is too slow to run on the
+    corpus. Running it only on the retrieved shortlist is the standard two-stage pattern:
+    retrieve wide and cheap, then re-rank narrow and precise.
+    """
+    if not documents:
+        return []
+    reranker = _get_reranker()
+    pairs = [(query, doc.page_content) for doc in documents]
+    scores = reranker.predict(pairs)
+    ranked = sorted(zip(documents, scores), key=lambda pair: pair[1], reverse=True)
+    return [doc for doc, _ in ranked[:top_n]]
 
 
 
@@ -138,7 +172,7 @@ def setup_rag_pipeline(pages: List[str], collection_name: str = "financeagent"):
     #     "k": 1,
     #     "filter": {"author": 'Varush0'}
     # }
-    parent_document_retriever.search_kwargs = {"k": 1}
+    parent_document_retriever.search_kwargs = {"k": 15}
     
     return parent_document_retriever
 
@@ -295,18 +329,24 @@ async def process_async(state: AgentState) -> AgentState:
         results = await loop.run_in_executor(None, retriever.invoke, expanded_query)
         
         if results:
-            top_result = results[0]
-            print(f"      ✅ RAG Retrieval Successful. Top result metadata: {top_result.metadata}")
+            print(f"      ✅ Retrieved {len(results)} candidate chunks. Re-ranking...")
+            # Re-rank against the ORIGINAL query, not the expanded one: expansion
+            # maximizes retrieval recall, but relevance should be judged on true intent.
+            reranked = await loop.run_in_executor(
+                None, rerank_documents, target_query, results, 4
+            )
+            print(f"      ✅ Kept top {len(reranked)} chunk(s) after re-ranking.")
             
-            # Generate natural language answer using LLM
+            # Answer from the combined top chunks, not just the single best.
+            context = "\n\n---\n\n".join(doc.page_content for doc in reranked)
+            source_pages = sorted({str(doc.metadata.get('page', 'N/A')) for doc in reranked})
+            
             print("      → Generating Q&A response...")
-            rag_answer = await loop.run_in_executor(None, generate_rag_answer, target_query, top_result.page_content)
+            rag_answer = await loop.run_in_executor(None, generate_rag_answer, target_query, context)
             
-            # Store RAG findings in state
-            rag_response = f"Q: {target_query}\n\nA: {rag_answer}\n\n(Source: Page {top_result.metadata.get('page', 'N/A')})"
+            rag_response = f"Q: {target_query}\n\nA: {rag_answer}\n\n(Sources: Page(s) {', '.join(source_pages)})"
             state["rag_response"] = rag_response
             
-            # Also append to analysis_result so it shows up in report/UI
             current_analysis = state.get("analysis_result") or ""
             state["analysis_result"] = current_analysis + f"\n\n[RAG Q&A]\n{rag_response}"
         else:
