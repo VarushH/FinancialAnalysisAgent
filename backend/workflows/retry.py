@@ -1,7 +1,12 @@
 # backend/workflows/retry.py
 """
-Retry and recovery utilities for agent execution.
-Provides decorators and helpers for handling transient failures.
+Retry utilities for agent execution.
+Provides decorators for handling TRANSIENT failures within a live run.
+
+Recovery from TERMINAL failures (process crash / restart) is not handled here:
+it is provided natively by the durable LangGraph checkpointer. Resuming a
+failed session via resume_analysis_pipeline() -> ainvoke(None, config)
+continues from the last checkpoint. See financial_analysis_workflow.py.
 """
 
 import asyncio
@@ -20,8 +25,7 @@ def retry_with_backoff(
     base_delay: float = 1.0,
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
-    retryable_exceptions: tuple = (Exception,)
-):
+    retryable_exceptions: tuple = (Exception,)):
     """
     Decorator for retrying async functions with exponential backoff.
     
@@ -117,33 +121,3 @@ def agent_retry(agent_name: str):
     return decorator
 
 
-class RecoveryManager:
-    """
-    Manages workflow recovery from checkpoints.
-    """
-    
-    def __init__(self, checkpointer, session_id: int):
-        self.checkpointer = checkpointer
-        self.session_id = session_id
-    
-    async def can_recover(self) -> bool:
-        """Check if there's a checkpoint available for recovery."""
-        from .checkpointer import get_latest_checkpoint
-        checkpoint = await get_latest_checkpoint(self.checkpointer, self.session_id)
-        return checkpoint is not None
-    
-    async def get_recovery_state(self) -> AgentState | None:
-        """Get the state from the latest checkpoint."""
-        from .checkpointer import get_latest_checkpoint
-        checkpoint = await get_latest_checkpoint(self.checkpointer, self.session_id)
-        
-        if checkpoint and "channel_values" in checkpoint:
-            return checkpoint["channel_values"].get("state")
-        return None
-    
-    async def get_failed_agent(self) -> str | None:
-        """Get the agent that failed in the last run."""
-        state = await self.get_recovery_state()
-        if state:
-            return state.get("last_error_agent")
-        return None

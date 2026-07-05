@@ -320,7 +320,9 @@ def retry_analysis(request, session_id):
     session.error_message = None
     session.mark_processing()
     
-    # Retry from checkpoint
+    # Recovery = native LangGraph resume. Because the checkpointer is durable,
+    # resume_analysis_pipeline() -> ainvoke(None, config) continues from the
+    # last successfully-checkpointed node instead of re-running from scratch.
     def retry_pipeline():
         try:
             final_state = resume_analysis_pipeline(session_id)
