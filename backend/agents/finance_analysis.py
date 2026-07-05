@@ -33,14 +33,17 @@ class SignificantDate(BaseModel):
     date: str = Field(description="The date or fiscal period (e.g., FY2024, 2023)")
     significance: str = Field(description="Why this date is important (e.g., Revenue peak, report end date)")
 
-class FinancialSummary(BaseModel):
-    revenue_2024: str = Field(description="The total revenue for FY2024")
-    net_income_2024: str = Field(description="The net income for FY2024")
-    total_assets: str = Field(description="Total assets from the balance sheet")
-    total_liabilities: str = Field(description="Total liabilities from the balance sheet")
-    total_equity: str = Field(description="Total shareholder's equity")
-    debt_to_equity: str = Field(description="The debt-to-equity ratio")
+class PeriodFinancials(BaseModel):
+    period: str = Field(description="Fiscal period label exactly as written in the document, e.g. 'FY2024', '2023', 'Year ended Dec 2022'")
+    revenue: str = Field(description="Total revenue for this period")
+    net_income: str = Field(description="Net income for this period")
+    total_assets: str = Field(description="Total assets for this period")
+    total_liabilities: str = Field(description="Total liabilities for this period")
+    total_equity: str = Field(description="Total shareholder's equity for this period")
+    debt_to_equity: str = Field(description="Debt-to-equity ratio for this period")
 
+class FinancialSummary(BaseModel):
+    periods: List[PeriodFinancials] = Field(description="One entry per fiscal period present in the document, ordered most-recent first")
 class ExtractionResult(BaseModel):
     companies: List[str] = Field(description="List of all company names mentioned")
     currencies: List[str] = Field(description="List of currency values (e.g., USD 120M)")
@@ -210,9 +213,10 @@ def extract_with_llm(text_list, tables_list_dicts):
         "{format_instructions}\n"
         "Content:\n{context}"
         """Instructions: 
-             1. Currency extracted should not have numbers, it shuold have the unique currency types available in the document
-             2. Number extracted must have significance written along for better interpreation of result
-             3. The dates should be extracted only if it has proper format written in Date,Month,Year format along with tis significance.
+             1. Currency extracted should not have numbers, it should have the unique currency types available in the document
+             2. Number extracted must have significance written along for better interpretation of result
+             3. The dates should be extracted only if it has proper format written in Date,Month,Year format along with its significance.
+             4. For financial_summary, extract a SEPARATE entry for EVERY fiscal period/year shown in the document (e.g. current and prior years in a comparative statement), ordered most-recent first. Do not merge years. If a metric is absent for a period, use "N/A".
         """
     )
 
@@ -326,12 +330,18 @@ async def process_async(state: AgentState) -> AgentState:
         
         # Create a summary string for the legacy analysis field
         fs = extraction_result.financial_summary
-        analysis_summary = (
-            f"Financial Summary for FY2024: Revenue {fs.revenue_2024}, "
-            f"Net Income {fs.net_income_2024}, Assets {fs.total_assets}. "
-            f"Key extracted data includes {len(extraction_result.important_dates)} significant dates "
-            f"and {len(extraction_result.numbers)} key ratios."
-        )
+        if fs.periods:
+            latest = fs.periods[0]
+            period_labels = ", ".join(p.period for p in fs.periods)
+            analysis_summary = (
+                f"Financial Summary ({latest.period}): Revenue {latest.revenue}, "
+                f"Net Income {latest.net_income}, Assets {latest.total_assets}. "
+                f"Periods extracted: {period_labels}. "
+                f"{len(extraction_result.important_dates)} significant dates, "
+                f"{len(extraction_result.numbers)} key ratios."
+            )
+        else:
+            analysis_summary = "Financial summary could not be extracted."
         state["analysis_result"] = analysis_summary
     else:
         print("      ⚠️ LLM Extraction returned no result, falling back to basic analysis")

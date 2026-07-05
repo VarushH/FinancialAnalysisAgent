@@ -11,35 +11,38 @@ from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
 from pydantic import BaseModel, Field
-
+import re
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
 
 
 # --- Risk Assessment Schemas ---
-
 class RiskRatio(BaseModel):
-    """Individual financial ratio assessment."""
+    """Individual financial ratio assessment for a specific period."""
     name: str = Field(description="Name of the ratio (e.g., Current Ratio)")
+    period: str = Field(description="Fiscal period this ratio was computed for (e.g., FY2024)")
     value: float = Field(description="Calculated value of the ratio (NaN if unknown)")
     description: str = Field(description="Explanation of what this ratio indicates")
 
 
 class RiskAnomaly(BaseModel):
-    """Detected financial anomaly."""
+    """Detected financial anomaly between two periods."""
     item: str = Field(description="Financial line item with anomaly")
-    yoy_change: float = Field(description="Year-over-year percentage change")
+    period_from: str = Field(description="Earlier period")
+    period_to: str = Field(description="Later period")
+    yoy_change: float = Field(description="Fractional change between the two periods")
     severity: str = Field(description="'High', 'Medium', or 'Low'")
     explanation: str = Field(description="Why this is flagged as anomalous")
 
 
 class RiskAssessmentReport(BaseModel):
     """Complete risk assessment report."""
-    ratios: List[RiskRatio] = Field(description="Financial ratios analyzed")
-    anomalies: List[RiskAnomaly] = Field(description="Detected anomalies")
+    ratios: List[RiskRatio] = Field(description="Financial ratios analyzed, per period")
+    anomalies: List[RiskAnomaly] = Field(description="Detected anomalies across periods")
     risk_score: int = Field(description="Overall risk score 0-100 (higher = more risk)")
     risk_level: str = Field(description="'LOW', 'MEDIUM', or 'HIGH'")
     key_insights: List[str] = Field(description="Key risk insights and recommendations")
+    periods_analyzed: List[str] = Field(default_factory=list, description="All fiscal periods detected and analyzed")
 
 
 # --- Risk Keywords for Basic Scanning ---
@@ -59,174 +62,187 @@ class RiskAssessmentEngine:
     """
     
     def __init__(self, income_statement_df=None, balance_sheet_df=None):
-        # Initialize DataFrames
         self.is_df = income_statement_df.copy() if income_statement_df is not None else pd.DataFrame()
         self.bs_df = balance_sheet_df.copy() if balance_sheet_df is not None else pd.DataFrame()
-        
-        # Initialize all expected ratios with NaN (unknown values)
-        self.ratios = {
-            "net_margin": float('nan'),
-            "gross_margin": float('nan'),
-            "debt_to_equity": float('nan'),
-            "current_ratio": float('nan')
-        }
+
+        # Ratios keyed by period label: {"FY2024": {"net_margin": ..., ...}, ...}
+        self.ratios = {}
+        self.periods = []          # ordered period labels, most-recent first
         self.scores = {}
         self.anomalies = []
         self.insights = []
 
-    def _get_val(self, df, row_pattern, col_name='FY2024'):
-        """Extract numeric value from DataFrame with pattern matching."""
+    @staticmethod
+    def _detect_period_columns(df):
+        """
+        Scan column headers and return [(year, col_name), ...] most-recent first.
+        Extracts a 4-digit year from ANY header text ('FY2024', '2024', 'Dec 2024').
+        This is what makes the engine year-agnostic instead of assuming 'FY2024'.
+        """
+        if df is None or df.empty:
+            return []
+        detected = []
+        for col in df.columns:
+            m = re.search(r'(19|20)\d{2}', str(col))
+            if m:
+                detected.append((int(m.group()), col))
+        seen, ordered = set(), []
+        for year, col in sorted(detected, key=lambda x: x[0], reverse=True):
+            if year not in seen:
+                seen.add(year)
+                ordered.append((year, col))
+        return ordered
+
+    def _get_val(self, df, row_pattern, col_name):
+        """Extract a numeric value for a row pattern from a specific column. NaN if absent."""
         if df.empty or col_name not in df.columns:
-            return 0.0
-        
-        # Partial case-insensitive matching
-        mask = df.iloc[:, 0].str.contains(row_pattern, case=False, na=False)
+            return float('nan')
+        mask = df.iloc[:, 0].astype(str).str.contains(row_pattern, case=False, na=False)
         result = df.loc[mask, col_name]
-        
         if not result.empty:
             val_str = str(result.values[0]).replace(',', '').replace('$', '').strip()
             try:
                 return float(val_str)
             except ValueError:
-                return 0.0
-        return 0.0
+                return float('nan')
+        return float('nan')
 
     def calculate_ratios(self):
-        """Calculate financial ratios with safety checks."""
-        # Extract values
-        rev_24 = self._get_val(self.is_df, 'Revenue')
-        ni_24 = self._get_val(self.is_df, 'Net Income')
-        gp_24 = self._get_val(self.is_df, 'Gross Profit')
-        total_liab = self._get_val(self.bs_df, 'Total Liabilities')
-        total_equity = self._get_val(self.bs_df, 'Total Equity')
-        current_assets = self._get_val(self.bs_df, 'Current Assets')
-        current_liab = self._get_val(self.bs_df, 'Current Liabilities')
+        """Compute ratios for EVERY detected period, keyed by period label."""
+        is_periods = dict((y, c) for y, c in self._detect_period_columns(self.is_df))
+        bs_periods = dict((y, c) for y, c in self._detect_period_columns(self.bs_df))
+        all_years = sorted(set(is_periods) | set(bs_periods), reverse=True)
 
-        # Calculate ratios
-        if rev_24 > 0:
-            self.ratios['net_margin'] = ni_24 / rev_24
-            self.ratios['gross_margin'] = gp_24 / rev_24
-        
-        if total_equity > 0:
-            self.ratios['debt_to_equity'] = total_liab / total_equity
-        
-        if current_liab > 0:
-            self.ratios['current_ratio'] = current_assets / current_liab
-        else:
-            # Fallback from document disclosures
-            self.ratios['current_ratio'] = 0.83
+        for year in all_years:
+            label = f"FY{year}"
+            is_col = is_periods.get(year)
+            bs_col = bs_periods.get(year)
+            r = {"net_margin": float('nan'), "gross_margin": float('nan'),
+                 "debt_to_equity": float('nan'), "current_ratio": float('nan')}
+
+            if is_col:
+                rev = self._get_val(self.is_df, 'Revenue', is_col)
+                ni = self._get_val(self.is_df, 'Net Income', is_col)
+                gp = self._get_val(self.is_df, 'Gross Profit', is_col)
+                if rev and rev > 0:
+                    r["net_margin"] = ni / rev
+                    r["gross_margin"] = gp / rev
+
+            if bs_col:
+                total_liab = self._get_val(self.bs_df, 'Total Liabilities', bs_col)
+                total_equity = self._get_val(self.bs_df, 'Total Equity', bs_col)
+                current_assets = self._get_val(self.bs_df, 'Current Assets', bs_col)
+                current_liab = self._get_val(self.bs_df, 'Current Liabilities', bs_col)
+                if total_equity and total_equity > 0:
+                    r["debt_to_equity"] = total_liab / total_equity
+                if current_liab and current_liab > 0:
+                    r["current_ratio"] = current_assets / current_liab
+
+            self.ratios[label] = r
+            self.periods.append(label)
 
     def detect_anomalies(self) -> List[Dict]:
-        """Detect >20% year-over-year swings in financial items."""
-        if self.is_df.empty:
+        """Detect >20% swings between each pair of consecutive detected periods."""
+        periods = self._detect_period_columns(self.is_df)  # (year, col) desc
+        if self.is_df.empty or len(periods) < 2:
+            self.anomalies = []
             return []
-        
+
         anomaly_list = []
-        
-        # Ensure columns are numeric
-        for col in ['FY2023', 'FY2024']:
-            if col in self.is_df.columns:
-                self.is_df[col] = pd.to_numeric(
-                    self.is_df[col].astype(str).str.replace(',', ''), 
-                    errors='coerce'
-                )
-        
-        if 'FY2023' in self.is_df.columns and 'FY2024' in self.is_df.columns:
-            # Calculate YoY growth
-            for idx, row in self.is_df.iterrows():
-                fy23 = row.get('FY2023', 0)
-                fy24 = row.get('FY2024', 0)
-                if pd.notna(fy23) and pd.notna(fy24) and fy23 != 0:
-                    yoy_change = (fy24 - fy23) / abs(fy23)
-                    if abs(yoy_change) > 0.20:
-                        item_name = str(row.iloc[0]) if len(row) > 0 else f"Row {idx}"
-                        severity = "High" if abs(yoy_change) > 0.50 else "Medium" if abs(yoy_change) > 0.30 else "Low"
+        for i in range(len(periods) - 1):
+            new_year, new_col = periods[i]
+            old_year, old_col = periods[i + 1]
+            new_vals = pd.to_numeric(self.is_df[new_col].astype(str).str.replace(',', ''), errors='coerce')
+            old_vals = pd.to_numeric(self.is_df[old_col].astype(str).str.replace(',', ''), errors='coerce')
+
+            for idx in self.is_df.index:
+                old_v, new_v = old_vals.get(idx), new_vals.get(idx)
+                if pd.notna(old_v) and pd.notna(new_v) and old_v != 0:
+                    yoy = (new_v - old_v) / abs(old_v)
+                    if abs(yoy) > 0.20:
+                        item_name = str(self.is_df.iloc[idx, 0])
+                        severity = "High" if abs(yoy) > 0.50 else "Medium" if abs(yoy) > 0.30 else "Low"
                         anomaly_list.append({
                             "item": item_name,
-                            "yoy_change": yoy_change,
+                            "period_from": f"FY{old_year}",
+                            "period_to": f"FY{new_year}",
+                            "yoy_change": yoy,
                             "severity": severity,
-                            "explanation": f"{'+' if yoy_change > 0 else ''}{yoy_change:.1%} change YoY"
+                            "explanation": f"{'+' if yoy > 0 else ''}{yoy:.1%} change FY{old_year}\u2192FY{new_year}"
                         })
-        
         self.anomalies = anomaly_list
         return anomaly_list
 
     def generate_risk_score(self) -> int:
-        """Generate risk score based on financial ratio thresholds and anomalies."""
+        """Score from the MOST RECENT period's ratios + anomalies across all periods."""
         import math
         score = 0
-        
-        current_ratio = self.ratios.get('current_ratio', float('nan'))
-        debt_to_equity = self.ratios.get('debt_to_equity', float('nan'))
-        
-        # Liquidity risk - only flag critical thresholds
+        latest = self.periods[0] if self.periods else None
+        latest_ratios = self.ratios.get(latest, {}) if latest else {}
+
+        current_ratio = latest_ratios.get('current_ratio', float('nan'))
+        debt_to_equity = latest_ratios.get('debt_to_equity', float('nan'))
+
         if not math.isnan(current_ratio) and current_ratio < 1.0:
             score += 40
-            self.insights.append("Liquidity concern: Current ratio below 1.0 indicates potential short-term payment issues")
-        
-        # Leverage risk - only flag very high leverage
+            self.insights.append(f"Liquidity concern ({latest}): current ratio below 1.0 indicates short-term payment risk")
+
         if not math.isnan(debt_to_equity) and debt_to_equity > 2.0:
             score += 30
-            self.insights.append("Leverage concern: Debt-to-Equity above 2.0 indicates high financial leverage")
-        
-        # Anomaly penalties
-        high_anomalies = sum(1 for a in self.anomalies if a.get('severity') == 'High')
-        medium_anomalies = sum(1 for a in self.anomalies if a.get('severity') == 'Medium')
-        score += high_anomalies * 15
-        score += medium_anomalies * 5
-        
-        if high_anomalies > 0:
-            self.insights.append(f"Volatility concern: {high_anomalies} high-severity YoY changes detected")
-        
+            self.insights.append(f"Leverage concern ({latest}): debt-to-equity above 2.0 indicates high leverage")
+
+        high = sum(1 for a in self.anomalies if a.get('severity') == 'High')
+        medium = sum(1 for a in self.anomalies if a.get('severity') == 'Medium')
+        score += high * 15 + medium * 5
+        if high:
+            self.insights.append(f"Volatility concern: {high} high-severity swings detected across periods")
+
         self.scores['total_risk_score'] = min(score, 100)
         return self.scores['total_risk_score']
 
     def generate_report(self) -> Optional[RiskAssessmentReport]:
-        """Generate complete risk assessment report."""
+        """Generate the complete multi-period risk assessment report."""
         self.calculate_ratios()
         self.detect_anomalies()
         risk_score = self.generate_risk_score()
-        
-        # Determine risk level
-        if risk_score >= 60:
-            risk_level = "HIGH"
-        elif risk_score >= 30:
-            risk_level = "MEDIUM"
-        else:
-            risk_level = "LOW"
-        
-        # Build ratio reports (without benchmark/status)
-        ratio_reports = []
+
+        risk_level = "HIGH" if risk_score >= 60 else "MEDIUM" if risk_score >= 30 else "LOW"
+
         ratio_descriptions = {
-            "current_ratio": "Measures short-term liquidity (Current Assets / Current Liabilities)",
-            "debt_to_equity": "Measures financial leverage (Total Debt / Total Equity)",
-            "net_margin": "Measures profitability (Net Income / Revenue)",
-            "gross_margin": "Measures production efficiency (Gross Profit / Revenue)"
+            "current_ratio": "Short-term liquidity (Current Assets / Current Liabilities)",
+            "debt_to_equity": "Financial leverage (Total Liabilities / Total Equity)",
+            "net_margin": "Profitability (Net Income / Revenue)",
+            "gross_margin": "Production efficiency (Gross Profit / Revenue)"
         }
-        
-        for name, value in self.ratios.items():
-            ratio_reports.append(RiskRatio(
-                name=name.replace('_', ' ').title(),
-                value=value if not (isinstance(value, float) and value != value) else float('nan'),  # Handle NaN
-                description=ratio_descriptions.get(name, "")
-            ))
-        
-        # Build anomaly reports
+
+        ratio_reports = []
+        for period in self.periods:
+            for name, value in self.ratios[period].items():
+                ratio_reports.append(RiskRatio(
+                    name=name.replace('_', ' ').title(),
+                    period=period,
+                    value=value if not (isinstance(value, float) and value != value) else float('nan'),
+                    description=ratio_descriptions.get(name, "")
+                ))
+
         anomaly_reports = [
             RiskAnomaly(
                 item=a['item'],
+                period_from=a['period_from'],
+                period_to=a['period_to'],
                 yoy_change=round(a['yoy_change'], 4),
                 severity=a['severity'],
                 explanation=a['explanation']
-            ) for a in self.anomalies[:5]  # Limit to top 5
+            ) for a in self.anomalies[:10]
         ]
-        
+
         return RiskAssessmentReport(
             ratios=ratio_reports,
             anomalies=anomaly_reports,
             risk_score=risk_score,
             risk_level=risk_level,
-            key_insights=self.insights[:5]  # Limit to top 5
+            key_insights=self.insights[:5],
+            periods_analyzed=self.periods
         )
 
 
@@ -367,7 +383,8 @@ async def process_async(state: AgentState) -> AgentState:
             "anomalies": [a.model_dump() for a in risk_report.anomalies],
             "risk_score": risk_report.risk_score,
             "risk_level": risk_report.risk_level,
-            "key_insights": risk_report.key_insights
+            "key_insights": risk_report.key_insights,
+            "periods_analyzed": risk_report.periods_analyzed
         })
         
         # Combine results

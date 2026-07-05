@@ -193,43 +193,49 @@ def create_pdf_report(
         c.setFillColor(colors.black)
         y -= 40
         
-        # Financial Summary Section
+        # Financial Summary Section (multi-period)
         fs = financial_extraction.get('financial_summary', {})
-        if fs:
-            draw_section_header("Financial Performance Summary (FY2024)")
-            
-            # Create a visual box or structured list for key metrics
-            metrics = [
-                ("Total Revenue", fs.get('revenue_2024', 'N/A')),
-                ("Net Income", fs.get('net_income_2024', 'N/A')),
-                ("Total Assets", fs.get('total_assets', 'N/A')),
-                ("Total Liabilities", fs.get('total_liabilities', 'N/A')),
-                ("Total Equity", fs.get('total_equity', 'N/A')),
-                ("Debt-to-Equity Ratio", fs.get('debt_to_equity', 'N/A'))
+        periods = fs.get('periods', []) if isinstance(fs, dict) else []
+        if periods:
+            draw_section_header("Financial Performance Summary")
+
+            display_periods = periods[:3]  # cap columns for page width
+            metric_rows = [
+                ("Total Revenue", "revenue"),
+                ("Net Income", "net_income"),
+                ("Total Assets", "total_assets"),
+                ("Total Liabilities", "total_liabilities"),
+                ("Total Equity", "total_equity"),
+                ("Debt-to-Equity", "debt_to_equity"),
             ]
-            
-            # Draw metrics in a 2x2 grid if possible, or list
-            # Let's do a clean list with distinct formatting
-            c.setFont("Helvetica", 10)
-            
-            start_y = y
-            for i, (name, val) in enumerate(metrics):
-                # Check for page break (unlikely at top of new page but good practice)
-                y = check_page(30)
-                
-                # Draw label
-                c.setFont("Helvetica-Bold", 11)
+
+            # Header row: Metric | <period> | <period> ...
+            y = check_page(40)
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColor(colors.HexColor("#34495e"))
+            c.drawString(70, y, "Metric")
+            col_x = 240
+            for p in display_periods:
+                c.drawString(col_x, y, str(p.get("period", "N/A"))[:14])
+                col_x += 100
+            c.setFillColor(colors.black)
+            y -= 6
+            c.line(70, y, min(col_x, width - 50), y)
+            y -= 16
+
+            # One row per metric, one value per period
+            for label, key in metric_rows:
+                y = check_page(20)
+                c.setFont("Helvetica-Bold", 10)
                 c.setFillColor(colors.HexColor("#34495e"))
-                c.drawString(70, y, f"{name}:")
-                
-                # Draw value
-                c.setFont("Helvetica", 11)
+                c.drawString(70, y, label)
                 c.setFillColor(colors.black)
-                # Align value to the right of the label area
-                c.drawString(220, y, str(val))
-                
-                y -= 25 # Spacing between rows
-            
+                c.setFont("Helvetica", 10)
+                col_x = 240
+                for p in display_periods:
+                    c.drawString(col_x, y, str(p.get(key, "N/A"))[:14])
+                    col_x += 100
+                y -= 20
             y -= 10
 
         # extracted extraction numbers (Significant Ratios/Figures)
@@ -459,33 +465,26 @@ def create_pdf_report(
         if ratios:
             draw_subsection("Financial Ratios")
             
-            # Table header
+            # Table header: Ratio | Period | Value
             c.setFont("Helvetica-Bold", 9)
             c.drawString(70, y, "Ratio Name")
-            c.drawString(200, y, "Value")
-            c.drawString(280, y, "Benchmark")
-            c.drawString(380, y, "Status")
+            c.drawString(240, y, "Period")
+            c.drawString(340, y, "Value")
             y -= 5
             c.line(70, y, 450, y)
             y -= 12
-            
+
             for ratio in ratios:
                 y = check_page(18)
                 name = ratio.get('name', 'N/A')
+                period = ratio.get('period', 'N/A')
                 value = ratio.get('value')
-                value_str = f"{value:.2f}" if value is not None else "N/A"
-                benchmark = ratio.get('benchmark', 'N/A')
-                status = ratio.get('status', 'N/A')
-                
-                status_color = colors.green if status == 'Good' else colors.red if status == 'Poor' else colors.orange
-                
+                value_str = f"{value:.2f}" if isinstance(value, (int, float)) and value == value else "N/A"
+
                 c.setFont("Helvetica", 9)
-                c.drawString(70, y, name[:20])
-                c.drawString(200, y, value_str)
-                c.drawString(280, y, str(benchmark))
-                c.setFillColor(status_color)
-                c.drawString(380, y, status)
-                c.setFillColor(colors.black)
+                c.drawString(70, y, name[:24])
+                c.drawString(240, y, str(period))
+                c.drawString(340, y, value_str)
                 y -= 14
             y -= 10
         
@@ -504,8 +503,11 @@ def create_pdf_report(
                 c.setFont("Helvetica-Bold", 9)
                 c.drawString(70, y, "●")
                 c.setFillColor(colors.black)
+                period_from = anomaly.get('period_from', '')
+                period_to = anomaly.get('period_to', '')
+                pair = f" ({period_from}\u2192{period_to})" if period_from else ""
                 c.setFont("Helvetica", 9)
-                c.drawString(85, y, f"{item}: {change:+.1f}% YoY change")
+                c.drawString(85, y, f"{item}: {change:+.1%} change{pair}")
                 y -= 14
             y -= 10
         
