@@ -45,7 +45,9 @@ class AgentState(TypedDict, total=False):
     requires_human_approval: bool
     human_feedback: Optional[str]
     approval_checkpoint: Optional[str]
-    
+    extraction_approved: bool
+    report_approved: bool
+
     # Error handling and retry
     error: Optional[str]
     retry_count: int
@@ -79,6 +81,8 @@ def create_initial_state(session_id: int, file_path: str, user_query: Optional[s
         requires_human_approval=False,
         human_feedback=None,
         approval_checkpoint=None,
+        extraction_approved=False,
+        report_approved=False,
         error=None,
         retry_count=0,
         max_retries=3,

@@ -5,7 +5,7 @@ django-cors-headers
 channels 
 daphne
 ddtrace
-
+aiosqlite
 
 # Configuration & Models
 

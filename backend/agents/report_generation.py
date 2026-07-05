@@ -619,7 +619,11 @@ async def process_async(state: AgentState) -> AgentState:
     
     # Save report_path to database so download works
     from api.models import AnalysisSession
-    AnalysisSession.objects.filter(pk=session_id).update(report_file=report_path)
+
+    def update_report_file(sid, path):
+        AnalysisSession.objects.filter(pk=sid).update(report_file=path)
+
+    await loop.run_in_executor(None, update_report_file, session_id, report_path)
     print(f"   💾 Report saved to database")
     
     state = add_message(state, "report_generation", "Report generation completed")

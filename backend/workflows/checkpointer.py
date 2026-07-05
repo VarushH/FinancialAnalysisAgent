@@ -4,26 +4,80 @@ Checkpointer configuration for state persistence.
 Uses MemorySaver for reliable in-process state persistence.
 """
 
-import os
-from pathlib import Path
-from langgraph.checkpoint.memory import MemorySaver
+# import os
+# from pathlib import Path
+# from langgraph.checkpoint.memory import MemorySaver
 
-# Global checkpointer instance for state persistence across workflow runs
-_checkpointer = None
+# # Global checkpointer instance for state persistence across workflow runs
+# _checkpointer = None
 
-# Simple state cache for preview access (session_id -> state)
-_state_cache = {}
+# # Simple state cache for preview access (session_id -> state)
+# _state_cache = {}
 
 
-def get_checkpointer() -> MemorySaver:
+# def get_checkpointer() -> MemorySaver:
+#     """
+#     Get or create the checkpointer for workflow state persistence.
+#     Uses MemorySaver for reliable operation.
+#     """
+#     global _checkpointer
+#     if _checkpointer is None:
+#         _checkpointer = MemorySaver()
+#     return _checkpointer
+
+import sqlite3
+import aiosqlite
+from contextlib import asynccontextmanager
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+_DB_PATH = "langgraph_checkpoints.sqlite"
+
+# The pipeline runs entirely through ainvoke/astream, so it needs an async
+# checkpointer. The Django status endpoint reads state synchronously, so it
+# gets its own sync checkpointer. Both point at the same WAL-mode sqlite
+# file, which is what keeps the two connections from blocking each other.
+_sync_checkpointer = None
+
+
+@asynccontextmanager
+async def async_checkpointer():
     """
-    Get or create the checkpointer for workflow state persistence.
-    Uses MemorySaver for reliable operation.
+    Fresh async checkpointer, scoped to a single pipeline run.
+
+    AsyncSqliteSaver wraps an aiosqlite connection whose internal asyncio.Lock
+    is bound to the event loop active when it's created. The pipeline is
+    invoked via async_to_sync from sync Django views, and each such call can
+    run on a new event loop - so a cached/global AsyncSqliteSaver breaks with
+    "bound to a different event loop" the moment a later call lands on a
+    different loop. Opening (and closing) a new connection per run avoids
+    that entirely.
     """
-    global _checkpointer
-    if _checkpointer is None:
-        _checkpointer = MemorySaver()
-    return _checkpointer
+    conn = await aiosqlite.connect(_DB_PATH)
+    try:
+        await conn.execute("PRAGMA journal_mode=WAL;")
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        yield saver
+    finally:
+        await conn.close()
+
+
+def get_checkpointer() -> SqliteSaver:
+    """
+    Sync checkpointer for read-only state lookups (e.g. the status endpoint).
+    WAL mode reduces lock contention between the pipeline thread and the
+    status-endpoint thread.
+    """
+    global _sync_checkpointer
+    if _sync_checkpointer is None:
+        conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        _sync_checkpointer = SqliteSaver(conn)
+        _sync_checkpointer.setup()
+    return _sync_checkpointer
+
+
 
 
 def get_checkpoint_config(session_id: int, checkpoint_id: str = None) -> dict:
@@ -40,36 +94,8 @@ def get_checkpoint_config(session_id: int, checkpoint_id: str = None) -> dict:
     return config
 
 
-def save_state_for_preview(session_id, state: dict):
-    """Save state to cache for preview access."""
-    global _state_cache
-    # Ensure session_id is always int for consistent cache keys
-    cache_key = int(session_id) if session_id is not None else None
-    if cache_key is not None:
-        _state_cache[cache_key] = state.copy()
-        print(f"   📦 State cached for session {cache_key}")
-        print(f"   📦 Cached report_path: {state.get('report_path')}")
-        print(f"   📦 All cached session IDs: {list(_state_cache.keys())}")
-
-
-def get_cached_state(session_id) -> dict | None:
-    """Get cached state for preview."""
-    # Ensure session_id is always int for consistent cache keys
-    cache_key = int(session_id) if session_id is not None else None
-    print(f"   📦 Looking for session {cache_key}")
-    print(f"   📦 Available cache keys: {list(_state_cache.keys())}")
-    return _state_cache.get(cache_key)
-
-
-def clear_cached_state(session_id: int):
-    """Clear cached state for a session."""
-    global _state_cache
-    if session_id in _state_cache:
-        del _state_cache[session_id]
-
 
 def clear_checkpointer():
-    """Clear the global checkpointer (useful for testing)."""
-    global _checkpointer, _state_cache
-    _checkpointer = None
-    _state_cache = {}
+    """Clear the global sync checkpointer (useful for testing)."""
+    global _sync_checkpointer
+    _sync_checkpointer = None
