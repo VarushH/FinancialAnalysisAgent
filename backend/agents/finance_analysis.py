@@ -5,6 +5,8 @@ Analyzes document content for financial insights.
 """
 
 import asyncio
+import re
+import math
 import pandas as pd
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -59,6 +61,32 @@ def rerank_documents(query: str, documents: list, top_n: int = 4) -> list:
     scores = reranker.predict(pairs)
     ranked = sorted(zip(documents, scores), key=lambda pair: pair[1], reverse=True)
     return [doc for doc, _ in ranked[:top_n]]
+
+
+def _parse_financial_value(raw) -> float:
+    """
+    Parse a free-text financial string ('USD 120.0 million', '1,050M', '15') into a
+    float normalized to millions. Returns NaN if unparseable, so YoY/margin math
+    downstream degrades gracefully instead of crashing or fabricating a number.
+    """
+    if raw is None:
+        return float('nan')
+    s = str(raw).lower().replace(',', '').strip()
+    if not s or s in ('n/a', 'na', 'none', '-'):
+        return float('nan')
+    m = re.search(r'-?\d+(?:\.\d+)?', s)
+    if not m:
+        return float('nan')
+    val = float(m.group())
+    # Normalize magnitude to a common "millions" base so ratios stay consistent.
+    if 'trillion' in s:
+        val *= 1_000_000
+    elif 'billion' in s or re.search(r'\d\s*b\b', s):
+        val *= 1_000
+    elif 'thousand' in s or re.search(r'\d\s*k\b', s):
+        val *= 0.001
+    # 'million'/'m' or bare number => base unit (x1)
+    return val
 
 
 
@@ -347,8 +375,6 @@ async def process_async(state: AgentState) -> AgentState:
             rag_response = f"Q: {target_query}\n\nA: {rag_answer}\n\n(Sources: Page(s) {', '.join(source_pages)})"
             state["rag_response"] = rag_response
             
-            current_analysis = state.get("analysis_result") or ""
-            state["analysis_result"] = current_analysis + f"\n\n[RAG Q&A]\n{rag_response}"
         else:
             print("      ⚠️ RAG Retrieval returned no results.")
             state["rag_response"] = "RAG retrieved no context for the query."
@@ -372,13 +398,36 @@ async def process_async(state: AgentState) -> AgentState:
         fs = extraction_result.financial_summary
         if fs.periods:
             latest = fs.periods[0]
+            n_periods = len(fs.periods)
             period_labels = ", ".join(p.period for p in fs.periods)
+
+            rev = _parse_financial_value(latest.revenue)
+            ni = _parse_financial_value(latest.net_income)
+
+            # Net margin for the latest period (units cancel in the ratio)
+            margin_txt = ""
+            if not math.isnan(rev) and rev != 0 and not math.isnan(ni):
+                margin_txt = f" (net margin {ni / rev:.1%})"
+
+            # Year-over-year revenue vs the prior period + a one-line trend read
+            yoy_txt, trend_txt = "", ""
+            if n_periods >= 2:
+                prev = fs.periods[1]
+                prev_rev = _parse_financial_value(prev.revenue)
+                if not math.isnan(rev) and not math.isnan(prev_rev) and prev_rev != 0:
+                    yoy = (rev - prev_rev) / abs(prev_rev)
+                    direction = "up" if yoy >= 0 else "down"
+                    yoy_txt = f" ({'+' if yoy >= 0 else ''}{yoy:.1%} vs {prev.period})"
+                    trend_txt = f"Trend: Revenue {direction} {abs(yoy):.1%} YoY ({prev.period}\u2192{latest.period}). "
+
             analysis_summary = (
-                f"Financial Summary ({latest.period}): Revenue {latest.revenue}, "
-                f"Net Income {latest.net_income}, Assets {latest.total_assets}. "
-                f"Periods extracted: {period_labels}. "
-                f"{len(extraction_result.important_dates)} significant dates, "
-                f"{len(extraction_result.numbers)} key ratios."
+                f"Financial Summary \u2014 {n_periods} period(s) analyzed ({period_labels}).\n"
+                f"{latest.period}: Revenue {latest.revenue}{yoy_txt}, "
+                f"Net Income {latest.net_income}{margin_txt}, Assets {latest.total_assets}.\n"
+                f"{trend_txt}"
+                f"Extracted: {n_periods} fiscal period(s), "
+                f"{len(extraction_result.important_dates)} significant date(s), "
+                f"{len(extraction_result.numbers)} key figure(s)."
             )
         else:
             analysis_summary = "Financial summary could not be extracted."
