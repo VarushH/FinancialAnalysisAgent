@@ -1,5 +1,6 @@
 // Modern upload form with drag and drop styling
 import React, { useState, useRef } from 'react';
+import Icon from './Icon';
 
 interface Props {
   onUpload: (file: File) => void;
@@ -62,7 +63,7 @@ const UploadForm: React.FC<Props> = ({ onUpload }) => {
         />
 
         <div className="upload-icon">
-          {file ? '📄' : '📁'}
+          <Icon name={file ? 'file' : 'folder'} size={26} />
         </div>
 
         <div className="upload-text">
@@ -86,11 +87,8 @@ const UploadForm: React.FC<Props> = ({ onUpload }) => {
         disabled={!file || isUploading}
         className="upload-button"
       >
-        {isUploading ? (
-          <>⏳ Uploading...</>
-        ) : (
-          <>🚀 Upload & Analyze</>
-        )}
+        <Icon name={isUploading ? 'clock' : 'upload-cloud'} size={17} />
+        {isUploading ? 'Uploading...' : 'Upload & Analyze'}
       </button>
     </form>
   );

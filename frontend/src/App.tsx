@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import UploadForm from './components/UploadForm';
 import ProgressList from './components/ProgressList';
 import Stepper, { Step } from './components/Stepper';
+import Icon from './components/Icon';
+import WorkflowGuide from './components/WorkflowGuide';
 import './App.css';
 
 interface Preview {
@@ -28,12 +30,12 @@ interface SessionStatus {
 }
 
 const WORKFLOW_STEPS: Step[] = [
-  { key: 'upload', label: 'Upload', icon: '📤' },
-  { key: 'extraction', label: 'Extraction', icon: '📄' },
-  { key: 'review', label: 'Review', icon: '🔍' },
-  { key: 'analysis', label: 'Analysis', icon: '💰' },
-  { key: 'approval', label: 'Approval', icon: '🔔' },
-  { key: 'complete', label: 'Complete', icon: '✅' },
+  { key: 'upload', label: 'Upload', icon: 'upload-cloud' },
+  { key: 'extraction', label: 'Extraction', icon: 'file-text' },
+  { key: 'review', label: 'Review', icon: 'search' },
+  { key: 'analysis', label: 'Analysis', icon: 'dollar-sign' },
+  { key: 'approval', label: 'Approval', icon: 'bell' },
+  { key: 'complete', label: 'Complete', icon: 'check-circle' },
 ];
 
 const App: React.FC = () => {
@@ -44,6 +46,7 @@ const App: React.FC = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [extractionApproved, setExtractionApproved] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'overview' | 'workflow'>('overview');
 
   // Editable report content
   const [editedAnalysis, setEditedAnalysis] = useState('');
@@ -218,10 +221,10 @@ const App: React.FC = () => {
     if (preview.type === 'extraction') {
       return (
         <div className="preview-section">
-          <h4>📄 {preview.title}</h4>
+          <h4><Icon name="file-text" size={16} /> {preview.title}</h4>
           <div className="preview-stats">
-            <span className="stat">📑 Pages: {preview.pages_count}</span>
-            <span className="stat">📊 Tables: {preview.tables_count}</span>
+            <span className="stat">Pages: {preview.pages_count}</span>
+            <span className="stat">Tables: {preview.tables_count}</span>
           </div>
           <div className="preview-content">
             <strong>Sample Content:</strong>
@@ -234,10 +237,10 @@ const App: React.FC = () => {
     if (preview.type === 'report') {
       return (
         <div className="preview-section">
-          <h4>📋 {preview.title}</h4>
-          <p className="edit-hint">✏️ You can edit the content below before approving</p>
+          <h4><Icon name="file-text" size={16} /> {preview.title}</h4>
+          <p className="edit-hint">You can edit the content below before approving</p>
           <div className="preview-item">
-            <strong>💰 Finance Analysis</strong>
+            <strong><Icon name="dollar-sign" size={14} /> Finance Analysis</strong>
             <textarea
               className="editable-preview"
               value={editedAnalysis}
@@ -246,7 +249,7 @@ const App: React.FC = () => {
             />
           </div>
           <div className="preview-item">
-            <strong>⚖️ Compliance Check</strong>
+            <strong><Icon name="shield" size={14} /> Compliance Check</strong>
             <textarea
               className="editable-preview"
               value={editedCompliance}
@@ -255,7 +258,7 @@ const App: React.FC = () => {
             />
           </div>
           <div className="preview-item">
-            <strong>📊 Risk Assessment</strong>
+            <strong><Icon name="bar-chart" size={14} /> Risk Assessment</strong>
             <textarea
               className="editable-preview"
               value={editedRisk}
@@ -271,130 +274,194 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-icon">📊</div>
-        <div>
-          <h1>Financial Analysis Agent</h1>
-          <p className="subtitle">Supervisor Agent Architecture with Human-in-the-Loop</p>
+    <div className="page">
+      <div className="bg-decoration" aria-hidden="true" />
+
+      <header className="top-nav">
+        <div className="top-nav-inner">
+          <div className="brand">
+            <div className="brand-icon"><Icon name="chart" size={20} /></div>
+            <div>
+              <h1>Financial Analysis Agent</h1>
+              <p className="subtitle">Supervisor Agent Architecture with Human-in-the-Loop</p>
+            </div>
+          </div>
+          <div className="tech-pills">
+            <span className="tech-pill">LangGraph</span>
+            <span className="tech-pill">Groq</span>
+            <span className="tech-pill">Qdrant</span>
+          </div>
         </div>
       </header>
 
-      <div className="app-container">
-        {!sessionId ? (
-          <div className="upload-section-wrapper">
-            <UploadForm onUpload={handleFileUpload} />
-            <div className="query-input-section">
-              <label htmlFor="userQuery" className="query-label">
-                Ask a specific question (optional)
-              </label>
-              <input
-                type="text"
-                id="userQuery"
-                className="query-input"
-                value={userQuery}
-                onChange={(e) => setUserQuery(e.target.value)}
-                placeholder="e.g. What is the consolidated revenue for 2024?"
-              />
-              <small className="query-hint">
-                If provided, the agent will use RAG to answer this specific question.
-              </small>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="session-info">
-              <div className="session-badge">Session #{sessionId}</div>
-              {status && (
-                <div className={`status-badge status-${status.status}`}>
-                  {status.status.replace('_', ' ').toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            <Stepper steps={WORKFLOW_STEPS} activeIndex={getActiveStepIndex()} />
-          </>
-        )}
-
-        {sessionId && <ProgressList messages={messages} />}
-
-        {/* Human Approval Section with Preview */}
-        {status?.requires_approval && (
-          <div className="approval-section">
-            <h3>🔔 Human Approval Required</h3>
-            <p className="checkpoint-name">
-              Checkpoint: <strong>{getCheckpointName(status.approval_checkpoint)}</strong>
-            </p>
-
-            {/* Draft Preview */}
-            {renderPreview()}
-
-            <div className="approval-form">
-              <textarea
-                placeholder="Optional feedback or notes..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                rows={3}
-              />
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-card">
+            <div className="sidebar-tabs">
               <button
-                className="approve-button"
-                onClick={handleApprove}
-                disabled={isApproving}
+                type="button"
+                className={`sidebar-tab ${sidebarTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('overview')}
               >
-                {isApproving ? '⏳ Approving...' : '✅ Approve & Continue'}
+                Overview
+              </button>
+              <button
+                type="button"
+                className={`sidebar-tab ${sidebarTab === 'workflow' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('workflow')}
+              >
+                Workflow
               </button>
             </div>
-          </div>
-        )}
 
-        {/* Download Report - Only shown after completion, requires user click */}
-        {completed && sessionId && (
-          <div className="download-section">
-            <h3>🎉 Analysis Complete!</h3>
-            <button
-              className="download-button"
-              onClick={async () => {
-                try {
-                  const response = await fetch(`/api/sessions/${sessionId}/report/`);
-                  if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    console.error('Download error:', response.status, errorData);
-                    alert(`Report not available: ${errorData.error || response.statusText}`);
-                    return;
+            {sidebarTab === 'overview' ? (
+              <>
+                <p className="sidebar-lead">
+                  Upload a financial PDF and a supervisor agent coordinates extraction,
+                  analysis, compliance, and risk checks — pausing for your approval at
+                  every key decision point.
+                </p>
+                <ul className="feature-list">
+                  <li>
+                    <span className="feature-icon"><Icon name="cpu" size={16} /></span>
+                    <div>
+                      <strong>Multi-Agent Orchestration</strong>
+                      <span>5 specialized agents coordinated by a LangGraph supervisor</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span className="feature-icon"><Icon name="users" size={16} /></span>
+                    <div>
+                      <strong>Human-in-the-Loop</strong>
+                      <span>Review and edit results before they're finalized</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span className="feature-icon"><Icon name="search" size={16} /></span>
+                    <div>
+                      <strong>RAG-Powered Q&amp;A</strong>
+                      <span>Ask a question; re-ranked retrieval grounds the answer</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span className="feature-icon"><Icon name="zap" size={16} /></span>
+                    <div>
+                      <strong>Real-Time Progress</strong>
+                      <span>Live WebSocket updates as each agent runs</span>
+                    </div>
+                  </li>
+                </ul>
+              </>
+            ) : (
+              <WorkflowGuide />
+            )}
+          </div>
+        </aside>
+
+        <main className="app-container">
+          {!sessionId ? (
+            <div className="upload-section-wrapper">
+              <UploadForm onUpload={handleFileUpload} />
+              <div className="query-input-section">
+                <label htmlFor="userQuery" className="query-label">
+                  Ask a specific question (optional)
+                </label>
+                <input
+                  type="text"
+                  id="userQuery"
+                  className="query-input"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="e.g. What is the consolidated revenue for 2024?"
+                />
+                <small className="query-hint">
+                  If provided, the agent will use RAG to answer this specific question.
+                </small>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="session-info">
+                <div className="session-badge">Session #{sessionId}</div>
+                {status && (
+                  <div className={`status-badge status-${status.status}`}>
+                    {status.status.replace('_', ' ').toUpperCase()}
+                  </div>
+                )}
+              </div>
+
+              <Stepper steps={WORKFLOW_STEPS} activeIndex={getActiveStepIndex()} />
+            </>
+          )}
+
+          {sessionId && <ProgressList messages={messages} />}
+
+          {/* Human Approval Section with Preview */}
+          {status?.requires_approval && (
+            <div className="approval-section">
+              <h3><Icon name="bell" size={17} /> Human Approval Required</h3>
+              <p className="checkpoint-name">
+                Checkpoint: <strong>{getCheckpointName(status.approval_checkpoint)}</strong>
+              </p>
+
+              {/* Draft Preview */}
+              {renderPreview()}
+
+              <div className="approval-form">
+                <textarea
+                  placeholder="Optional feedback or notes..."
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  rows={3}
+                />
+                <button
+                  className="approve-button"
+                  onClick={handleApprove}
+                  disabled={isApproving}
+                >
+                  <Icon name={isApproving ? 'clock' : 'check-circle'} size={16} />
+                  {isApproving ? 'Approving...' : 'Approve & Continue'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Download Report - Only shown after completion, requires user click */}
+          {completed && sessionId && (
+            <div className="download-section">
+              <h3><Icon name="check-circle" size={18} /> Analysis Complete</h3>
+              <button
+                className="download-button"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`/api/sessions/${sessionId}/report/`);
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}));
+                      console.error('Download error:', response.status, errorData);
+                      alert(`Report not available: ${errorData.error || response.statusText}`);
+                      return;
+                    }
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `financial_report_${sessionId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                  } catch (err) {
+                    console.error('Download exception:', err);
+                    alert('Failed to download report. Please try again.');
                   }
-                  const blob = await response.blob();
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `financial_report_${sessionId}.pdf`;
-                  document.body.appendChild(a);
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                  document.body.removeChild(a);
-                } catch (err) {
-                  console.error('Download exception:', err);
-                  alert('Failed to download report. Please try again.');
-                }
-              }}
-            >
-              📥 Download Report
-            </button>
-          </div>
-        )}
-
-        {/* Workflow Steps Legend */}
-        <div className="workflow-info">
-          <h4>Workflow Steps</h4>
-          <ol>
-            <li>📄 Document Extraction</li>
-            <li>🔔 <em>Human Review Checkpoint</em></li>
-            <li>💰 Finance Analysis + ⚖️ Compliance (parallel)</li>
-            <li>📊 Risk Assessment</li>
-            <li>📝 Report Generation</li>
-            <li>🔔 <em>Final Approval Checkpoint</em></li>
-            <li>✅ Complete</li>
-          </ol>
-        </div>
+                }}
+              >
+                <Icon name="download" size={16} />
+                Download Report
+              </button>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
