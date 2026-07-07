@@ -33,8 +33,10 @@ Financial Analysis Agent is a full-stack application that leverages a **Supervis
 ### 📄 Document Processing
 
 - **PDF Upload & Extraction** — Supports structured and unstructured PDF documents via PyMuPDF and pdfplumber
-- **RAG (Retrieval-Augmented Generation)** — Ask specific questions about uploaded documents
-- **Vector Store Integration** — Qdrant-powered vector search for accurate document retrieval
+- **RAG (Retrieval-Augmented Generation)** — Optionally ask a specific question at upload time (e.g. "What is the consolidated revenue for 2024?"); the Finance Analysis agent answers it as part of its output
+- **Query Expansion** — Groq rewrites/expands the question before retrieval to improve recall
+- **Vector Store Integration** — Per-session Qdrant collections + `ParentDocumentRetriever` for parent/child chunk retrieval
+- **Cross-Encoder Re-Ranking** — Retrieved chunks are re-scored with `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) to surface the most relevant passages before they're passed to the LLM
 
 ### 📊 Report Generation
 
@@ -67,10 +69,10 @@ Financial Analysis Agent is a full-stack application that leverages a **Supervis
 | **Django Channels + Daphne**          | WebSocket support (ASGI)               |
 | **LangGraph**                         | Multi-agent workflow orchestration     |
 | **LangChain**                         | LLM integrations & document processing |
-| **Google Gemini**                     | Primary LLM for analysis               |
-| **Groq**                              | Fast LLM inference                     |
+| **Groq**                              | LLM inference for all agents (analysis, compliance, query expansion) |
 | **Qdrant**                            | Vector database for RAG                |
 | **FastEmbed / Sentence Transformers** | Document embeddings                    |
+| **CrossEncoder (sentence-transformers)** | Re-ranks retrieved chunks for RAG   |
 | **PyMuPDF + pdfplumber**              | PDF parsing & extraction               |
 | **ReportLab**                         | PDF report generation                  |
 | **SQLite**                            | Session & metadata storage             |
@@ -132,13 +134,7 @@ cd FinancialAnalysisAgent
 # 2. Create your .env file with API keys (see above)
 
 # 3. Build and start all services
-docker compose -p finapp up -d --build
-
-# 4. Check that containers are running
-docker compose -p finapp ps
-
-# 5. View logs (optional, useful for debugging)
-docker compose -p finapp logs -f
+docker compose up -d --build
 ```
 
 🌐 **Access the app at** → [http://localhost](http://localhost)
@@ -146,17 +142,11 @@ docker compose -p finapp logs -f
 #### Docker Management Commands
 
 ```bash
-# Stop containers (keeps them for restart later)
-docker compose -p finapp stop
+# View logs
+docker compose logs -f
 
-# Restart stopped containers
-docker compose -p finapp start
-
-# Stop AND remove containers + networks (full cleanup)
-docker compose -p finapp down
-
-# Rebuild after code changes
-docker compose -p finapp up -d --build
+# Stop and remove containers
+docker compose down
 ```
 
 ---
@@ -348,11 +338,11 @@ npm install
 
 ```bash
 # View container logs for debugging
-docker compose -p finapp logs -f
+docker compose logs -f
 
 # Rebuild from scratch
-docker compose -p finapp down
-docker compose -p finapp up -d --build
+docker compose down
+docker compose up -d --build
 ```
 
 ---
