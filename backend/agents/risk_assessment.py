@@ -396,43 +396,84 @@ async def process_async(state: AgentState) -> AgentState:
         None, run_risk_assessment_engine, tables
     )
     
+
+    # Matched keywords per bucket, so the detail page can show WHICH terms drove the signal
+    matched = {
+        level: [kw for kw in kws if kw in text]
+        for level, kws in RISK_KEYWORDS.items()
+    }
+    keyword_analysis = {
+        "level": basic_risk_level,
+        "high_terms": matched["high"],
+        "medium_terms": matched["medium"],
+        "positive_terms": matched["low"],
+    }
+
+    _rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+
+    def sanitize_for_json(obj):
+        import math
+        if isinstance(obj, dict):
+            return {k: sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [sanitize_for_json(v) for v in obj]
+        elif isinstance(obj, float) and (math.isnan(obj) or obj != obj):
+            return None
+        return obj
+
     if risk_report:
         print(f"      → Engine Risk Score: {risk_report.risk_score}/100")
-        
-        # Helper to convert NaN to None for JSON serialization
-        def sanitize_for_json(obj):
-            import math
-            if isinstance(obj, dict):
-                return {k: sanitize_for_json(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [sanitize_for_json(v) for v in obj]
-            elif isinstance(obj, float) and (math.isnan(obj) or obj != obj):
-                return None  # Convert NaN to None
-            return obj
-        
-        # Store detailed report in state (with NaN converted to None)
+
+        financial_level = risk_report.risk_level
+
+        # --- RECONCILED VERDICT: combine keyword + financial signals ---
+        # Take the more severe of the two, and explain which signal set the verdict.
+        if _rank[basic_risk_level] >= _rank[financial_level]:
+            overall_level = basic_risk_level
+            driver = "keyword scan of document text"
+        else:
+            overall_level = financial_level
+            driver = "financial ratio & anomaly analysis"
+        agree = basic_risk_level == financial_level
+        reconciliation = (
+            f"Keyword signal = {basic_risk_level}; Financial signal = {financial_level}. "
+            + ("Both signals agree." if agree
+               else f"Verdict set to the higher signal ({overall_level}), driven by {driver}.")
+        )
+
         state["risk_report"] = sanitize_for_json({
             "ratios": [r.model_dump() for r in risk_report.ratios],
             "anomalies": [a.model_dump() for a in risk_report.anomalies],
             "risk_score": risk_report.risk_score,
             "risk_level": risk_report.risk_level,
             "key_insights": risk_report.key_insights,
-            "periods_analyzed": risk_report.periods_analyzed
+            "periods_analyzed": risk_report.periods_analyzed,
+            "keyword_analysis": keyword_analysis,
+            "overall_risk": overall_level,
+            "reconciliation": reconciliation,
         })
-        
-        # Combine results
+
         state["risk_result"] = (
-            f"{basic_result}\n\n"
-            f"Financial Analysis: Risk Score {risk_report.risk_score}/100 ({risk_report.risk_level})\n"
-            f"Ratios analyzed: {len(risk_report.ratios)}, Anomalies detected: {len(risk_report.anomalies)}"
+            f"Overall Risk: {overall_level}. {reconciliation}\n"
+            f"Financial Risk Score: {risk_report.risk_score}/100 ({financial_level}); "
+            f"{len(risk_report.ratios)} ratios, {len(risk_report.anomalies)} anomaly(ies) across "
+            f"{len(risk_report.periods_analyzed)} period(s)."
         )
-        
-        print(f"   ✅ Risk Level: {risk_report.risk_level} (Score: {risk_report.risk_score})")
+        print(f"   ✅ Overall Risk: {overall_level} (keyword={basic_risk_level}, financial={financial_level})")
     else:
-        state["risk_report"] = None
-        state["risk_result"] = basic_result
-        print(f"   ✅ Risk Level: {basic_risk_level} (keyword-based only)")
-    
+        # No financial engine result — verdict is the keyword signal alone
+        state["risk_report"] = sanitize_for_json({
+            "ratios": [], "anomalies": [], "risk_score": None,
+            "risk_level": basic_risk_level, "key_insights": [],
+            "periods_analyzed": [], "keyword_analysis": keyword_analysis,
+            "overall_risk": basic_risk_level,
+            "reconciliation": f"Keyword signal = {basic_risk_level}; financial analysis unavailable (no tables).",
+        })
+        state["risk_result"] = (
+            f"Overall Risk: {basic_risk_level} (keyword analysis only; no financial tables found). {basic_details}."
+        )
+        print(f"   ✅ Overall Risk: {basic_risk_level} (keyword-based only)")
+
     state = add_message(state, "risk_assessment", "Risk assessment completed")
     return state
 

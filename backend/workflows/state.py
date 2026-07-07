@@ -28,6 +28,9 @@ class AgentState(TypedDict, total=False):
     compliance_result: Optional[str]
     risk_result: Optional[str]
     report_path: Optional[str]
+    financial_extraction: Optional[dict]
+    audit_report: Optional[dict]
+    risk_report: Optional[dict]
     
     # RAG Interactive
     user_query: Optional[str]
@@ -74,6 +77,9 @@ def create_initial_state(session_id: int, file_path: str, user_query: Optional[s
         compliance_result=None,
         risk_result=None,
         report_path=None,
+        financial_extraction=None,
+        audit_report=None,
+        risk_report=None,
         current_agent="supervisor",
         next_agent="document_extraction",
         status="pending",
