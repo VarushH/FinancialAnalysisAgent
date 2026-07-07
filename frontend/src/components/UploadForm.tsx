@@ -75,6 +75,7 @@ const UploadForm: React.FC<Props> = ({ onUpload }) => {
             <>
               <span className="upload-title">Drop your PDF here</span>
               <span className="upload-subtitle">or click to browse</span>
+              <span className="upload-hint">PDF files only</span>
             </>
           )}
         </div>

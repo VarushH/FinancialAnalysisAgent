@@ -15,7 +15,7 @@ const ProgressList: React.FC<Props> = ({ messages }) => {
   }
 
   return (
-    <ul>
+    <ul className="progress-feed">
       {messages.map((msg, idx) => (
         <li key={idx} className={getMessageClass(msg)}>
           {msg}
