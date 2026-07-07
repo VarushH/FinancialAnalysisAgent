@@ -288,6 +288,39 @@ def run_risk_assessment_engine(tables: List) -> Optional[RiskAssessmentReport]:
     
     return report
 
+def latest_ratios_from_tables(tables: List) -> Dict[str, Any]:
+    """
+    Compute the MOST RECENT period's key ratios from raw tables, reusing the same
+    RiskAssessmentEngine the Risk agent uses.
+
+    Shared on purpose: the Compliance agent's quantitative checks and the Risk
+    section both call this, so their liquidity/leverage numbers are guaranteed
+    to agree instead of being computed two different ways.
+    """
+    income_df, balance_df = None, None
+    for table in tables:
+        if isinstance(table, dict):
+            df = pd.DataFrame(table)
+        elif isinstance(table, pd.DataFrame):
+            df = table
+        else:
+            continue
+        if len(df.columns) > 0:
+            first_col = ' '.join(df.iloc[:, 0].astype(str).str.lower())
+            if any(kw in first_col for kw in ['revenue', 'net income', 'gross profit', 'operating']):
+                income_df = df
+            elif any(kw in first_col for kw in ['assets', 'liabilities', 'equity', 'current']):
+                balance_df = df
+
+    engine = RiskAssessmentEngine(income_df, balance_df)
+    engine.calculate_ratios()
+    latest = engine.periods[0] if engine.periods else None
+    r = engine.ratios.get(latest, {}) if latest else {}
+    return {
+        "current_ratio": r.get("current_ratio", float('nan')),
+        "debt_to_equity": r.get("debt_to_equity", float('nan')),
+        "period": latest,
+    }
 
 # --- Async Agent Process ---
 

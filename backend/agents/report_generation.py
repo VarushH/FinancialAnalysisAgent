@@ -342,20 +342,20 @@ def create_pdf_report(
 
         rules = audit_report.get('rules_check', [])
         if rules:
-            story.append(Paragraph(f"Regulatory Compliance Rules ({len(rules)})", styles["h2"]))
-            rows = [[Paragraph(h, styles["cellb"]) for h in ("Rule", "Status", "Requirement / Evidence")]]
+            story.append(Paragraph(f"Compliance Checks Verified ({len(rules)})", styles["h2"]))
+            rows = [[Paragraph(h, styles["cellb"]) for h in ("Check", "Status", "Evidence")]]
             for r in rules:
                 status = r.get('status', 'Unknown')
                 s_col = GREEN if status == 'Compliant' else RED if status == 'Non-Compliant' else AMBER
-                detail = r.get('requirement', '')
-                if r.get('evidence'):
-                    detail += f'<br/><font color="{GREY.hexval()}" size="8">Evidence: {r.get("evidence")}</font>'
+                check_name = r.get('name') or r.get('requirement') or r.get('rule_id', 'N/A')
+                name_cell = f'<b>{r.get("rule_id", "")}</b> &nbsp;{check_name}'
+                evidence = r.get('evidence', '') or '—'
                 rows.append([
-                    Paragraph(str(r.get('rule_id', 'N/A')), styles["cell"]),
+                    Paragraph(name_cell, styles["cell"]),
                     Paragraph(_status_chip(status, s_col), styles["cell"]),
-                    Paragraph(detail, styles["cell"]),
+                    Paragraph(evidence, styles["cell"]),
                 ])
-            t = Table(rows, colWidths=[content_w * 0.14, content_w * 0.20, content_w * 0.66],
+            t = Table(rows, colWidths=[content_w * 0.34, content_w * 0.16, content_w * 0.50],
                       repeatRows=1, hAlign="LEFT")
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), NAVY),
@@ -368,6 +368,15 @@ def create_pdf_report(
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ]))
             story.append(t)
+            story.append(Spacer(1, 8))
+
+        # Audit Trail (previously extracted but never rendered)
+        trail = audit_report.get('audit_trail', '')
+        if trail:
+            story.append(Paragraph("Audit Trail", styles["h2"]))
+            trail_lines = [ln.strip() for ln in str(trail).replace(';', '\n').split('\n') if ln.strip()]
+            for ln in trail_lines:
+                story.append(Paragraph(f"• {ln}", styles["small"]))
             story.append(Spacer(1, 8))
 
         flags = audit_report.get('risk_flags', [])

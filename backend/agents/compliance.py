@@ -7,6 +7,8 @@ Performs LLM-based regulatory compliance audits (IFRS, SOX 404).
 
 import asyncio
 import os
+import math
+import pandas as pd
 from typing import List, Optional
 from django.conf import settings
 from pydantic import BaseModel, Field
@@ -21,6 +23,7 @@ from workflows.retry import agent_retry
 class ComplianceRule(BaseModel):
     """Individual compliance rule check result."""
     rule_id: str
+    name: str = Field(description="Human-readable check name")
     requirement: str
     status: str = Field(description="'Compliant', 'Non-Compliant', or 'Observation'")
     evidence: str = Field(description="Exact text snippet proving the status")
@@ -34,12 +37,21 @@ class RiskFlag(BaseModel):
 
 
 class ComplianceReport(BaseModel):
-    """Complete compliance audit report."""
+    """LLM-produced part of the audit (the 3 qualitative checks + supporting findings).
+    The numeric score is computed in code from the final 5 checks, not by the LLM."""
     rules_check: List[ComplianceRule]
     risk_flags: List[RiskFlag]
     audit_trail: str = Field(description="Chronological log of checks performed (SOX, IFRS, etc.)")
-    compliance_score: int = Field(description="A score from 0-100 based on findings")
     annotations: List[str] = Field(description="Specific suggestions for report improvement")
+
+
+# --- The fixed 5-check compliance rubric (same every document) ---
+# 3 qualitative checks (LLM-judged from text) + 2 quantitative (computed in code).
+QUALITATIVE_CHECKS = [
+    ("C1", "IFRS Presentation & Disclosure", "Statements presented on an IFRS basis with required disclosures."),
+    ("C2", "SOX 404 Internal Controls", "Management attestation on internal control over financial reporting."),
+    ("C3", "Going Concern", "Going-concern basis assessed and disclosed."),
+]
 
 
 # --- Forbidden Terms for Basic Scanning ---
@@ -100,10 +112,15 @@ def run_compliance_audit(text_list: List[str], tables_list: List = None) -> Opti
     print(f"      → Context length: {len(context)} characters")
     
     prompt = ChatPromptTemplate.from_template(
-        "You are a Senior Regulatory Compliance Auditor. Analyze the document based on these rules:\n"
-        "1. Check for IFRS and SOX 404 compliance statements.\n"
-        "2. Flag liquidity risks (Current Ratio < 1.0) and leverage risks (Debt-to-Equity > 2.0).\n"
-        "3. Identify mentions of internal controls and deficiencies.\n\n"
+        "You are a Senior Regulatory Compliance Auditor. Assess the document against EXACTLY these "
+        "three qualitative checks and return one rules_check entry for each, using the given rule_id and name:\n"
+        "  C1 | IFRS Presentation & Disclosure | statements presented on an IFRS basis with required disclosures.\n"
+        "  C2 | SOX 404 Internal Controls | management attestation on internal control over financial reporting.\n"
+        "  C3 | Going Concern | going-concern basis assessed and disclosed.\n"
+        "For each, status is 'Compliant', 'Non-Compliant', or 'Observation'. If the document does NOT "
+        "address a check, you MUST return 'Observation' with evidence 'insufficient evidence' — never fabricate a pass.\n"
+        "Also return: risk_flags (liquidity/leverage/regulatory concerns you observe), a concise chronological "
+        "audit_trail describing the checks you performed, and annotations (specific improvement suggestions).\n\n"
         "{format_instructions}\n"
         "Document Content:\n{context}"
     )
@@ -175,52 +192,110 @@ async def process_async(state: AgentState) -> AgentState:
     
     state["compliance_result"] = basic_result
     
-    # --- Part 2: LLM-based regulatory compliance audit ---
-    print("      → Running LLM-based regulatory compliance audit...")
+    # --- Part 2: Fixed 5-check rubric (3 LLM-judged + 2 computed) ---
+    # Teaching point: use the LLM where judgment from text is needed, use code where
+    # a number can be verified. The 2 computed checks reuse the RiskAssessmentEngine,
+    # so they are guaranteed to agree with the Risk section.
+    print("      → Running 5-check regulatory audit...")
+
     
-    # Convert table dicts back to DataFrames if needed
-    import pandas as pd
     table_dfs = []
-    if tables:
-        for t in tables:
-            if isinstance(t, dict):
-                try:
-                    table_dfs.append(pd.DataFrame(t))
-                except:
-                    pass
-            elif hasattr(t, 'to_csv'):
-                table_dfs.append(t)
-    
-    audit_report = await asyncio.get_event_loop().run_in_executor(
-        None, run_compliance_audit, pages, table_dfs
-    )
-    
-    if audit_report:
-        print(f"      → Audit report received:  {audit_report}")
-        print(f"      → Compliance Score: {audit_report.compliance_score}/100")
-        print(f"      → Rules Checked: {len(audit_report.rules_check)}")
-        print(f"      → Risk Flags: {len(audit_report.risk_flags)}")
-        
-        # Store detailed audit results in state
-        state["audit_report"] = {
-            "rules_check": [rule.model_dump() for rule in audit_report.rules_check],
-            "risk_flags": [flag.model_dump() for flag in audit_report.risk_flags],
-            "audit_trail": audit_report.audit_trail,
-            "compliance_score": audit_report.compliance_score,
-            "annotations": audit_report.annotations
-        }
-        
-        # Update compliance result with audit summary
-        state["compliance_result"] = (
-            f"{basic_result}\n\n"
-            f"Regulatory Audit Score: {audit_report.compliance_score}/100\n"
-            f"Risk Flags: {len(audit_report.risk_flags)} identified\n"
-            f"Annotations: {len(audit_report.annotations)} improvement suggestions"
-        )
+    for t in (tables or []):
+        if isinstance(t, dict):
+            try:
+                table_dfs.append(pd.DataFrame(t))
+            except Exception:
+                pass
+        elif hasattr(t, 'to_csv'):
+            table_dfs.append(t)
+
+    loop = asyncio.get_event_loop()
+
+    # (a) Qualitative checks — LLM
+    llm_audit = await loop.run_in_executor(None, run_compliance_audit, pages, table_dfs)
+
+    # (b) Quantitative checks — computed via the shared engine
+    from agents.risk_assessment import latest_ratios_from_tables
+    ratios = await loop.run_in_executor(None, latest_ratios_from_tables, table_dfs)
+    period_lbl = ratios.get("period") or "latest period"
+
+    def _quant_check(cid, name, requirement, key, threshold, op):
+        val = ratios.get(key, float('nan'))
+        if val is None or (isinstance(val, float) and math.isnan(val)):
+            return {"rule_id": cid, "name": name, "requirement": requirement,
+                    "status": "Observation",
+                    "evidence": "Insufficient table data to compute this ratio."}
+        ok = (val >= threshold) if op == ">=" else (val <= threshold)
+        return {"rule_id": cid, "name": name, "requirement": requirement,
+                "status": "Compliant" if ok else "Non-Compliant",
+                "evidence": f"Computed value = {val:.2f} for {period_lbl}; requirement {op} {threshold}."}
+
+    quant_checks = [
+        _quant_check("C4", "Liquidity Adequacy", "Current ratio >= 1.0", "current_ratio", 1.0, ">="),
+        _quant_check("C5", "Leverage & Debt Disclosure", "Debt-to-equity <= 2.0", "debt_to_equity", 2.0, "<="),
+    ]
+
+    # Assemble qualitative results (fall back to Observation if the LLM audit failed)
+    if llm_audit and llm_audit.rules_check:
+        qual_checks = []
+        for rule in llm_audit.rules_check[:3]:
+            d = rule.model_dump()
+            if not d.get("name"):
+                d["name"] = d.get("requirement", d.get("rule_id", "Check"))
+            qual_checks.append(d)
+        risk_flags = [f.model_dump() for f in llm_audit.risk_flags]
+        audit_trail = llm_audit.audit_trail
+        annotations = llm_audit.annotations
     else:
-        print("      → LLM audit skipped (not available)")
-        state["audit_report"] = None
-    
+        qual_checks = [{"rule_id": cid, "name": name, "requirement": req,
+                        "status": "Observation", "evidence": "Regulatory audit unavailable."}
+                       for cid, name, req in QUALITATIVE_CHECKS]
+        risk_flags, audit_trail, annotations = [], "Audit trail unavailable.", []
+
+    all_checks = qual_checks + quant_checks
+
+    # Transparent score straight from the 5 checks (reconciles the two signals)
+    pts = {"Compliant": 20, "Observation": 10, "Non-Compliant": 0}
+    compliance_score = sum(pts.get(c["status"], 0) for c in all_checks)
+
+    n_compliant = sum(1 for c in all_checks if c["status"] == "Compliant")
+    observations = [c for c in all_checks if c["status"] == "Observation"]
+    non_compliant = [c for c in all_checks if c["status"] == "Non-Compliant"]
+
+    # The forbidden-term scan escalates the verdict regardless of the checks
+    if found_issues:
+        overall = "NON-COMPLIANT"
+        risk_flags = [{"severity": "High", "risk_type": "Integrity",
+                       "description": f"Forbidden terms present: {', '.join(found_issues)}"}] + risk_flags
+        compliance_score = min(compliance_score, 40)
+    elif non_compliant:
+        overall = "NON-COMPLIANT"
+    elif observations:
+        overall = "NEEDS REVIEW"
+    else:
+        overall = "COMPLIANT"
+
+    state["audit_report"] = {
+        "rules_check": all_checks,
+        "risk_flags": risk_flags,
+        "audit_trail": audit_trail,
+        "compliance_score": compliance_score,
+        "annotations": annotations,
+        "overall_status": overall,
+    }
+
+    top_flags = "; ".join(f"[{f.get('severity')}] {f.get('risk_type')}" for f in risk_flags[:3]) or "none"
+    top_rec = annotations[0] if annotations else "none"
+    scan_txt = f"flagged: {', '.join(found_issues)}" if found_issues else "clean"
+    state["compliance_result"] = (
+        f"Compliance Status: {overall} - Regulatory Score {compliance_score}/100; "
+        f"forbidden-term scan {scan_txt}.\n"
+        f"Checks: {n_compliant}/5 compliant, {len(observations)} observation(s), {len(non_compliant)} non-compliant.\n"
+        f"Top risk flags: {top_flags}.\n"
+        f"Key recommendation: {top_rec}."
+    )
+
+    print(f"   ✅ Compliance verdict: {overall} ({compliance_score}/100)")
     state = add_message(state, "compliance", "Compliance checking completed")
     return state
 
