@@ -194,12 +194,6 @@ def setup_rag_pipeline(pages: List[str], collection_name: str = "financeagent"):
     parent_document_retriever.add_documents(docs)
     
     # Configure search kwargs
-    # Note: Qdrant filter format can be strict. Disabling strict filter for this demo to ensure basic retrieval works.
-    # If filtering is needed, it must match Qdrant's Filter model constraints (using 'must', 'match', etc.)
-    # parent_document_retriever.search_kwargs = {
-    #     "k": 1,
-    #     "filter": {"author": 'Varush0'}
-    # }
     parent_document_retriever.search_kwargs = {"k": 15}
     
     return parent_document_retriever
@@ -443,12 +437,4 @@ async def process_async(state: AgentState) -> AgentState:
     print(f"   ✅ Analysis complete.")
     state = add_message(state, "finance_analysis", "Finance analysis completed")
     return state
-
-# Legacy sync process function
-def process(pages, tables, send_message):
-    """Legacy synchronous process function."""
-    send_message("Finance analysis started")
-    # For legacy sync calls, we just return a dummy string to avoid breaking old callers
-    analysis = "Legacy process called. Please use async process for full extraction."
-    send_message("Finance analysis completed")
-    return analysis
+

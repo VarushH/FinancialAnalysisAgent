@@ -7,6 +7,7 @@ Provides endpoints for upload, analysis control, and report download.
 import asyncio
 import threading
 import logging
+import traceback
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, JsonResponse
 from rest_framework.decorators import api_view
@@ -181,7 +182,6 @@ def approve_checkpoint(request, session_id):
         except Exception as e:
             logger.error(f"Pipeline resume failed for session {session_id}: {e}")
             print(f"   ❌ Resume exception: {e}")
-            import traceback
             traceback.print_exc()
             session.refresh_from_db()
             session.mark_failed(str(e))

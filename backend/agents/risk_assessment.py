@@ -10,6 +10,7 @@ import os
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
+import math
 from pydantic import BaseModel, Field
 import re
 from workflows.state import AgentState, add_message, set_error
@@ -175,7 +176,6 @@ class RiskAssessmentEngine:
 
     def generate_risk_score(self) -> int:
         """Score from the MOST RECENT period's ratios + anomalies across all periods."""
-        import math
         score = 0
         latest = self.periods[0] if self.periods else None
         latest_ratios = self.ratios.get(latest, {}) if latest else {}
@@ -412,7 +412,6 @@ async def process_async(state: AgentState) -> AgentState:
     _rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
 
     def sanitize_for_json(obj):
-        import math
         if isinstance(obj, dict):
             return {k: sanitize_for_json(v) for k, v in obj.items()}
         elif isinstance(obj, list):
@@ -476,18 +475,3 @@ async def process_async(state: AgentState) -> AgentState:
 
     state = add_message(state, "risk_assessment", "Risk assessment completed")
     return state
-
-
-# Legacy sync process function
-def process(pages, compliance_result, send_message):
-    """Legacy synchronous process function."""
-    send_message("Risk assessment started")
-    if "fraud" in compliance_result:
-        risk = "High"
-    elif "loss" in " ".join(pages).lower():
-        risk = "Medium"
-    else:
-        risk = "Low"
-    result = f"Overall risk assessment: {risk} risk."
-    send_message("Risk assessment completed")
-    return result

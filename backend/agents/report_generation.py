@@ -12,6 +12,7 @@ ratios are healthy vs concerning, anomalies by severity), and fuller sections.
 import os
 import math
 import asyncio
+from functools import partial
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -26,6 +27,7 @@ from django.conf import settings
 
 from workflows.state import AgentState, add_message, set_error
 from workflows.retry import agent_retry
+from agents.finance_analysis import _parse_financial_value
 
 
 # --- Palette ---
@@ -130,12 +132,6 @@ def create_pdf_report(
 
     styles = _styles()
     width, height = letter
-
-    try:
-        from agents.finance_analysis import _parse_financial_value
-    except Exception:
-        def _parse_financial_value(_):
-            return float('nan')
 
     def _decorate(canvas, doc):
         canvas.saveState()
@@ -516,7 +512,6 @@ async def process_async(state: AgentState) -> AgentState:
     print(f"      Audit report: {'Yes' if audit_report else 'No'} | Risk report: {'Yes' if risk_report else 'No'}")
 
     loop = asyncio.get_event_loop()
-    from functools import partial
     pdf_func = partial(create_pdf_report, session_id, analysis, compliance, risk, len(pages),
                        audit_report, risk_report, state.get("financial_extraction"))
     report_path = await loop.run_in_executor(None, pdf_func)
@@ -534,13 +529,4 @@ async def process_async(state: AgentState) -> AgentState:
     state = add_message(state, "report_generation", "Report generation completed")
     return state
 
-
-# Legacy sync process function
-def process(session, analysis, compliance, risk, send_message):
-    """Legacy synchronous process function (kept for backward compatibility)."""
-    send_message("Report generation started")
-    create_pdf_report(session.id, analysis, compliance, risk, 0)
-    session.report_file = os.path.join(settings.MEDIA_ROOT, 'reports', f'report_{session.id}.pdf')
-    session.status = 'completed'
-    session.save()
-    send_message("Report generation completed")
+

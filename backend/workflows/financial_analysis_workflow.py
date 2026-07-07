@@ -8,8 +8,10 @@ Features:
 - WebSocket progress updates
 """
 
+import os
 import asyncio
 import logging
+import traceback
 from typing import Literal
 from datetime import datetime
 
@@ -126,7 +128,6 @@ async def report_generation_node(state: AgentState) -> AgentState:
     report_path = state.get('report_path')
     print(f"   📄 REPORT NODE - report_path after generation: {report_path}")
     if report_path:
-        import os
         print(f"   📄 REPORT NODE - file exists: {os.path.exists(report_path)}")
     
     log_step("REPORT", f"Done - {report_path}")
@@ -241,7 +242,6 @@ async def arun_analysis_pipeline(session_id: int, user_query: str = None) -> Age
     print(f"\n{'='*50}\nSTARTING PIPELINE - Session {session_id}\n{'='*50}")
 
     def get_session(sid):
-        from api.models import AnalysisSession
         return AnalysisSession.objects.get(pk=sid)
 
     session = await asyncio.get_event_loop().run_in_executor(None, get_session, session_id)
@@ -256,7 +256,7 @@ async def arun_analysis_pipeline(session_id: int, user_query: str = None) -> Age
               f"checkpoint={final_state.get('approval_checkpoint')}")
         return final_state
     except Exception as e:
-        import traceback; traceback.print_exc()
+        traceback.print_exc()
         state["status"] = "failed"; state["error"] = str(e)
         return state
 
@@ -286,7 +286,7 @@ async def aresume_pipeline(session_id: int, feedback: str = None,
               f"checkpoint={final_state.get('approval_checkpoint')}")
         return final_state
     except Exception as e:
-        import traceback; traceback.print_exc()
+        traceback.print_exc()
         return {"status": "failed", "error": str(e), "session_id": session_id}
 
 

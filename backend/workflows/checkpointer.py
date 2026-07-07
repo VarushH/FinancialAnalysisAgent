@@ -4,26 +4,7 @@ Checkpointer configuration for state persistence.
 Uses MemorySaver for reliable in-process state persistence.
 """
 
-# import os
-# from pathlib import Path
-# from langgraph.checkpoint.memory import MemorySaver
 
-# # Global checkpointer instance for state persistence across workflow runs
-# _checkpointer = None
-
-# # Simple state cache for preview access (session_id -> state)
-# _state_cache = {}
-
-
-# def get_checkpointer() -> MemorySaver:
-#     """
-#     Get or create the checkpointer for workflow state persistence.
-#     Uses MemorySaver for reliable operation.
-#     """
-#     global _checkpointer
-#     if _checkpointer is None:
-#         _checkpointer = MemorySaver()
-#     return _checkpointer
 
 import sqlite3
 import aiosqlite

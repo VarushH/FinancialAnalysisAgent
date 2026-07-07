@@ -8,6 +8,7 @@ import os
 import asyncio
 import fitz  # PyMuPDF
 import pdfplumber
+import pandas as pd
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from qdrant_client import QdrantClient
@@ -23,7 +24,6 @@ def extract_text_and_tables(pdf_path: str) -> tuple[list[str], int, list]:
     Extract text pages and tables from a PDF file.
     Uses PyMuPDF for text (handles corrupted PDFs) and pdfplumber for tables (optional).
     """
-    import pandas as pd
     
     all_tables = []
     all_text = []
@@ -64,47 +64,7 @@ def extract_text_and_tables(pdf_path: str) -> tuple[list[str], int, list]:
     return all_text, len(all_tables), all_tables
 
 
-# def extract_text_and_tables(pdf_path: str) -> tuple[list[str], int, list]:
-#     """
-#     Extract text pages and tables from a PDF file.
-#     """
-    
-#     all_tables = []
-#     document_text = []
-#     all_text = []
-#     table_count = 0
-#     print(f"      → Opening PDF: {pdf_path}")
-#     with pdfplumber.open(pdf_path) as pdf:
-#         for page_num, page in enumerate(pdf.pages):
 
-#             # Extract text from the current page
-#             text = page.extract_text()
-
-#             if text:
-#                 print(f"      → Text detected on page {page_num + 1}")
-#                 # Add the page text to our list
-#                 all_text.append(text)
-#                 document_text.append(Document(page_content=text, metadata = {"page": page_num + 1, "source": pdf_path}))
-
-        
-
-#             # find_tables() returns a list of table objects
-#             tables = page.find_tables()
-#             if len(tables) > 0: #If there are tables on the page
-#                 print(f"      → Table(s) detected on page {page_num + 1}")
-#                 # Extract tables from the current page
-#                 tables = page.extract_tables()
-
-#                 for table_index, table in enumerate(tables):
-#                     # Convert list of lists to DataFrame
-#                     df = pd.DataFrame(table[1:], columns=table[0])
-#                     print(f"      → Extracted Table {table_index + 1} from Page {page_num + 1}")
-#                     all_tables.append(df)
-#         print(f"      → Extracted {len(all_text)} pages of text")
-#         table_count = len(all_tables)   
-#         print(f"      → Found {table_count} tables")     
-    
-#     return all_text,table_count, all_tables
 
 
 @agent_retry(agent_name="document_extraction")
@@ -160,15 +120,4 @@ async def process_async(state: AgentState) -> AgentState:
     
     return state
 
-
-# Legacy sync process function
-def process(session, send_message):
-    """Legacy synchronous process function."""
-    send_message("Document extraction started")
-    file_path = session.file.path
-    pages, table_count, tables = extract_text_and_tables(file_path)
-    session.pages = pages
-    session.table_count = table_count
-    session.send_message = send_message
-    send_message(f"Document extraction completed ({len(pages)} pages, {table_count} tables)")
-    return pages, tables
+

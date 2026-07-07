@@ -10,6 +10,7 @@ import os
 import math
 import pandas as pd
 from typing import List, Optional
+# pyrefly: ignore [missing-import]
 from django.conf import settings
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -193,9 +194,6 @@ async def process_async(state: AgentState) -> AgentState:
     state["compliance_result"] = basic_result
     
     # --- Part 2: Fixed 5-check rubric (3 LLM-judged + 2 computed) ---
-    # Teaching point: use the LLM where judgment from text is needed, use code where
-    # a number can be verified. The 2 computed checks reuse the RiskAssessmentEngine,
-    # so they are guaranteed to agree with the Risk section.
     print("      → Running 5-check regulatory audit...")
 
     
@@ -300,16 +298,4 @@ async def process_async(state: AgentState) -> AgentState:
     return state
 
 
-# Legacy sync process function
-def process(pages, send_message):
-    """Legacy synchronous process function."""
-    send_message("Compliance checking started")
-    text = " ".join(pages).lower()
-    forbidden = ['fraud', 'bribery', 'kickback', 'illegal', 'sanction']
-    found = [word for word in forbidden if word in text]
-    if found:
-        result = f"Potential compliance issues found: {', '.join(found)}."
-    else:
-        result = "No immediate compliance issues detected."
-    send_message("Compliance checking completed")
-    return result
+
